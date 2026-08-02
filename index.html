@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈</title>
+    <title>Shark Cinema 🦈 (Kinovibe Browser)</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
+        
         body { 
             background: #0b0713; 
             color: #e2dbf8; 
@@ -16,9 +17,10 @@
             min-height: 100vh; 
             padding: 15px; 
         }
+        
         .modal-overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(11, 7, 19, 0.9); 
+            background: rgba(11, 7, 19, 0.95); 
             backdrop-filter: blur(12px); 
             display: flex; justify-content: center; align-items: center; 
             z-index: 1000; 
@@ -34,6 +36,7 @@
         }
         .modal-box h2 { margin-bottom: 10px; font-size: 24px; color: #c77dff; }
         .modal-box p { font-size: 14px; color: #9d8ec4; margin-bottom: 22px; }
+        
         .pin-input { 
             width: 100%; padding: 14px; border-radius: 14px; 
             border: 1px solid #3d2b63; background: #0f0a1c; 
@@ -42,6 +45,7 @@
             transition: 0.3s;
         }
         .pin-input:focus { border-color: #9d4edd; box-shadow: 0 0 15px rgba(157, 78, 221, 0.4); }
+
         .btn { 
             width: 100%; padding: 14px; border-radius: 14px; border: none; 
             font-weight: bold; font-size: 15px; cursor: pointer; transition: 0.2s; 
@@ -56,7 +60,8 @@
             border: 1px solid #332252; 
         }
         .btn:active { transform: scale(0.98); }
-        .header { width: 100%; max-width: 900px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+
+        .header { width: 100%; max-width: 950px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
         .header h2 { font-size: 22px; color: #e2dbf8; text-shadow: 0 0 10px rgba(199, 125, 255, 0.3); }
         .status-group { display: flex; gap: 8px; align-items: center; }
         .badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: bold; }
@@ -64,10 +69,11 @@
         .badge-guest { background: rgba(114, 9, 183, 0.2); color: #b5179e; border: 1px solid #7209b7; }
         .badge-online { background: rgba(46, 213, 115, 0.2); color: #2ed573; border: 1px solid #2ed573; }
         .badge-offline { background: rgba(255, 71, 87, 0.2); color: #ff4757; border: 1px solid #ff4757; }
+
         .owner-panel { 
-            width: 100%; max-width: 900px; background: #171026; 
-            border: 1px solid #332252; padding: 18px; border-radius: 18px; 
-            margin-bottom: 20px; display: none; 
+            width: 100%; max-width: 950px; background: #171026; 
+            border: 1px solid #332252; padding: 15px; border-radius: 18px; 
+            margin-bottom: 15px; display: none; 
             box-shadow: 0 8px 25px rgba(0,0,0,0.3);
         }
         .url-input-group { display: flex; gap: 10px; }
@@ -77,21 +83,22 @@
             font-size: 14px; outline: none; 
         }
         .url-input:focus { border-color: #9d4edd; }
-        
+
+        /* Окно браузера Киновайба */
         .player-container { 
-            width: 100%; max-width: 900px; height: 550px; 
+            width: 100%; max-width: 950px; height: 600px; 
             position: relative; background: #000; border-radius: 20px; 
             overflow: hidden; border: 1px solid #2e1f47; 
             box-shadow: 0 12px 40px rgba(123, 44, 191, 0.25); 
         }
         iframe { width: 100%; height: 100%; border: none; }
         
-        /* Прозрачный щит, блокирующий клики зрителя */
+        /* Щит от кликов для Зрителя */
         .guest-overlay { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
             z-index: 100; display: none; background: transparent; 
         }
-        @media (max-width: 600px) { .player-container { height: 350px; } }
+        @media (max-width: 600px) { .player-container { height: 400px; } }
     </style>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
@@ -100,7 +107,7 @@
     <div class="modal-overlay" id="authModal">
         <div class="modal-box">
             <h2>Shark Cinema 🦈</h2>
-            <p id="modalStatus">Введи 8-значный ПИН Овнера или войди как зритель</p>
+            <p>Введи 8-значный ПИН Овнера или войди как зритель</p>
             <input type="password" id="pinInput" class="pin-input" maxlength="8" placeholder="••••••••" inputmode="numeric">
             <button class="btn btn-owner" id="loginBtn" onclick="loginOwner()">Войти как Owner</button>
             <button class="btn btn-guest" onclick="loginGuest()">Пропустить (Я Зритель)</button>
@@ -115,17 +122,18 @@
         </div>
     </div>
 
+    <!-- Панель отправки страниц Kinovibe -->
     <div class="owner-panel" id="ownerPanel">
         <div class="url-input-group">
-            <input type="text" id="kinovibeUrl" class="url-input" placeholder="Вставишь ссылку на страницу Kinovibe...">
-            <button class="btn btn-owner" style="width: auto; padding: 0 22px; margin-bottom: 0;" onclick="loadMovie()">Загрузить</button>
+            <input type="text" id="kinovibeUrl" class="url-input" placeholder="Вставь ссылку на страницу/серию с Kinovibe...">
+            <button class="btn btn-owner" style="width: auto; padding: 0 22px; margin-bottom: 0;" onclick="syncKinovibePage()">Синхронизировать</button>
         </div>
     </div>
 
     <div class="player-container">
-        <!-- Щит для Зрителя -->
         <div class="guest-overlay" id="guestOverlay"></div>
-        <iframe id="mainIframe" src="about:blank" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+        <!-- По умолчанию НАВСЕГДА открыт только Kinovibe.cc -->
+        <iframe id="mainIframe" src="https://kinovibe.cc/" allowfullscreen allow="autoplay; encrypted-media"></iframe>
     </div>
 
     <script>
@@ -139,16 +147,17 @@
         });
 
         const iframe = document.getElementById('mainIframe');
+        let isOwner = false;
 
         socket.on('connect', () => {
-            console.log("[✅] WebSocket успешно подключен к VPS!");
+            console.log("[✅] WebSocket подключен!");
             const serverBadge = document.getElementById('serverBadge');
             serverBadge.className = 'badge badge-online';
             serverBadge.innerText = '🟢 Сервер: На связи';
         });
 
         socket.on('disconnect', () => {
-            console.log("[❌] Потеря связи с VPS!");
+            console.log("[❌] Офлайн");
             const serverBadge = document.getElementById('serverBadge');
             serverBadge.className = 'badge badge-offline';
             serverBadge.innerText = '🔴 Сервер: Офлайн';
@@ -160,27 +169,27 @@
             loginBtn.disabled = false;
 
             if (data.success) {
+                isOwner = true;
                 document.getElementById('authModal').style.display = 'none';
                 document.getElementById('ownerPanel').style.display = 'block';
                 document.getElementById('roleBadge').className = 'badge badge-owner';
                 document.getElementById('roleBadge').innerText = 'Режим: Owner 👑';
-                document.getElementById('guestOverlay').style.display = 'none'; // Овнер может кликать!
             } else {
                 alert(data.message || 'Неверный ПИН!');
             }
         });
 
-        // Как только Зритель подключается — сервер передает ему фильм, который сейчас смотрит Овнер
+        // Как только Зритель заходит — ему сразу подгружается та страница Киновайба, которую смотрит Овнер
         socket.on('room_state', (state) => {
-            if (state.current_url && iframe.src !== state.current_url) {
-                console.log("[🎬] Синхронизируем фильм с Овнером:", state.current_url);
+            if (!isOwner && state.current_url && iframe.src !== state.current_url) {
+                console.log("[🎬] Зритель подгружает Киновайб Овнера:", state.current_url);
                 iframe.src = state.current_url;
             }
         });
 
         socket.on('sync_event', (data) => {
             if (data.action === 'load') {
-                console.log("[🎬] Овнер переключил фильм на:", data.url);
+                console.log("[🎬] Переключение страницы Киновайба:", data.url);
                 iframe.src = data.url;
             }
         });
@@ -212,14 +221,14 @@
             document.getElementById('authModal').style.display = 'none';
             document.getElementById('roleBadge').className = 'badge badge-guest';
             document.getElementById('roleBadge').innerText = 'Режим: Зритель 👁️';
-            
-            // Включаем прозрачный щит: Зритель НЕ может нажимать на плеер/сайт!
+            // Включаем щит: Зритель только смотрит и не может нажимать на Kinovibe
             document.getElementById('guestOverlay').style.display = 'block';
         }
 
-        function loadMovie() {
+        function syncKinovibePage() {
             const url = document.getElementById('kinovibeUrl').value.trim();
-            if (!url) return alert('Вставишь ссылку!');
+            if (!url) return alert('Вставь ссылку на страницу/серию с Kinovibe!');
+            
             iframe.src = url;
             socket.emit('sync_action', { action: 'load', url: url });
         }
