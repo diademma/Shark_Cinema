@@ -6,16 +6,17 @@
     <title>Тест плеера 🎬</title>
     <style>
         body { background: #111; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
-        video { width: 100%; max-width: 600px; border-radius: 12px; margin-top: 15px; }
+        video { width: 100%; max-width: 600px; border-radius: 12px; margin-top: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
     </style>
 </head>
 <body>
     <h1>Привет! Это тест кинотеатра ❤️</h1>
-    <p>Если видео ниже воспроизводится без ВПН — значит всё отлично!</p>
+    <p>Если видео ниже воспроизводится — значит всё отлично!</p>
     
-    <!-- Тестовый видеоролик -->
-    <video controls playsinline>
-        <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
+    <!-- Видео с открытыми CORS-заголовками от VideoJS -->
+    <video controls playsinline poster="https://vjs.zencdn.net/v/oceans.png">
+        <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4">
+        <source src="https://media.w3.org/2010/05/sintel/trailer.mp4" type="video/mp4">
         Твой браузер не поддерживает видео.
     </video>
 </body>
