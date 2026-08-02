@@ -3,21 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Тест плеера 🎬</title>
+    <title>Shark Cinema 🦈</title>
     <style>
-        body { background: #111; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
-        video { width: 100%; max-width: 600px; border-radius: 12px; margin-top: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #0f0f13; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 15px; }
+        
+        /* Всплывающее окно авторизации */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); backdrop-filter: blur(8px); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+        .modal-box { background: #1a1a24; border: 1px solid #2a2a3a; padding: 25px; border-radius: 20px; text-align: center; width: 90%; max-width: 380px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .modal-box h2 { margin-bottom: 10px; font-size: 22px; color: #ff4757; }
+        .modal-box p { font-size: 14px; color: #a0a0b0; margin-bottom: 20px; }
+        .pin-input { width: 100%; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #0f0f13; color: white; font-size: 18px; text-align: center; letter-spacing: 4px; margin-bottom: 15px; outline: none; }
+        .btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-weight: bold; font-size: 15px; cursor: pointer; transition: 0.2s; }
+        .btn-owner { background: #ff4757; color: white; margin-bottom: 10px; }
+        .btn-guest { background: transparent; color: #a0a0b0; border: 1px solid #333; }
+        .btn:active { transform: scale(0.98); }
+
+        /* Шапка и статус */
+        .header { width: 100%; max-width: 800px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .badge { padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        .badge-owner { background: rgba(255, 71, 87, 0.2); color: #ff4757; border: 1px solid #ff4757; }
+        .badge-guest { background: rgba(46, 213, 115, 0.2); color: #2ed573; border: 1px solid #2ed573; }
+
+        /* Панель Овнера (Управление Kinovibe) */
+        .owner-panel { width: 100%; max-width: 800px; background: #1a1a24; padding: 15px; border-radius: 15px; margin-bottom: 15px; display: none; }
+        .url-input-group { display: flex; gap: 10px; }
+        .url-input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #333; background: #0f0f13; color: white; font-size: 14px; outline: none; }
+
+        /* Плеер */
+        .player-container { width: 100%; max-width: 800px; position: relative; background: #000; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        video { width: 100%; display: block; }
+        .guest-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 80%; z-index: 10; display: none; } /* Блокирует клики зрителя по плееру */
     </style>
 </head>
 <body>
-    <h1>Привет! Это тест кинотеатра ❤️</h1>
-    <p>Если видео ниже воспроизводится — значит всё отлично!</p>
-    
-    <!-- Видео с открытыми CORS-заголовками от VideoJS -->
-    <video controls playsinline poster="https://vjs.zencdn.net/v/oceans.png">
-        <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4">
-        <source src="https://media.w3.org/2010/05/sintel/trailer.mp4" type="video/mp4">
-        Твой браузер не поддерживает видео.
-    </video>
+
+    <!-- Окно Авторизации -->
+    <div class="modal-overlay" id="authModal">
+        <div class="modal-box">
+            <h2>Shark Cinema 🦈</h2>
+            <p>Введи 8-значный ПИН Овнера или войди как зритель</p>
+            <input type="password" id="pinInput" class="pin-input" maxlength="8" placeholder="••••••••" inputmode="numeric">
+            <button class="btn btn-owner" onclick="loginOwner()">Войти как Owner</button>
+            <button class="btn btn-guest" onclick="loginGuest()">Пропустить (Я Зритель)</button>
+        </div>
+    </div>
+
+    <!-- Шапка сайта -->
+    <div class="header">
+        <h2 style="font-size: 20px;">Shark Cinema</h2>
+        <span id="roleBadge" class="badge badge-guest">Режим: Зритель</span>
+    </div>
+
+    <!-- Панель управления для Овнера -->
+    <div class="owner-panel" id="ownerPanel">
+        <div class="url-input-group">
+            <input type="text" id="kinovibeUrl" class="url-input" placeholder="Вставь ссылку на фильм с Kinovibe...">
+            <button class="btn btn-owner" style="width: auto; padding: 0 20px;" onclick="loadMovie()">Загрузить</button>
+        </div>
+    </div>
+
+    <!-- Плеер -->
+    <div class="player-container">
+        <div class="guest-overlay" id="guestOverlay"></div> <!-- Блок кликов для гостей -->
+        <video id="mainPlayer" controls playsinline poster="https://vjs.zencdn.net/v/oceans.png">
+            <source src="https://vjs.zencdn.net/v/oceans.mp4" type="video/mp4">
+        </video>
+    </div>
+
+    <script>
+        // Задай свой 8-значный ПИН здесь (потом вынесем на сервер)
+        const OWNER_PIN = "12345678"; 
+        let isOwner = false;
+
+        function loginOwner() {
+            const pin = document.getElementById('pinInput').value;
+            if (pin === OWNER_PIN) {
+                isOwner = true;
+                document.getElementById('authModal').style.display = 'none';
+                document.getElementById('ownerPanel').style.display = 'block';
+                document.getElementById('roleBadge').className = 'badge badge-owner';
+                document.getElementById('roleBadge').innerText = 'Режим: Owner 👑';
+            } else {
+                alert('Неверный 8-значный ПИН!');
+            }
+        }
+
+        function loginGuest() {
+            isOwner = false;
+            document.getElementById('authModal').style.display = 'none';
+            document.getElementById('roleBadge').className = 'badge badge-guest';
+            document.getElementById('roleBadge').innerText = 'Режим: Зритель 👁️';
+            document.getElementById('guestOverlay').style.display = 'block'; // Блокируем прямые клики по плееру у гостей
+        }
+
+        function loadMovie() {
+            const url = document.getElementById('kinovibeUrl').value;
+            if (!url) return alert('Вставь ссылку!');
+            alert('Запрос отправлен на сервер! (Здесь будет парсинг ссылки: ' + url + ')');
+        }
+    </script>
 </body>
 </html>
