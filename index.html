@@ -18,7 +18,6 @@
             padding: 15px; 
         }
         
-        /* Всплывающее окно авторизации */
         .modal-overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             background: rgba(11, 7, 19, 0.9); 
@@ -62,7 +61,6 @@
         }
         .btn:active { transform: scale(0.98); }
 
-        /* Шапка и статус */
         .header { width: 100%; max-width: 800px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .header h2 { font-size: 22px; color: #e2dbf8; text-shadow: 0 0 10px rgba(199, 125, 255, 0.3); }
         
@@ -70,7 +68,6 @@
         .badge-owner { background: rgba(157, 78, 221, 0.2); color: #c77dff; border: 1px solid #9d4edd; }
         .badge-guest { background: rgba(114, 9, 183, 0.2); color: #b5179e; border: 1px solid #7209b7; }
 
-        /* Панель Овнера */
         .owner-panel { 
             width: 100%; max-width: 800px; background: #171026; 
             border: 1px solid #332252; padding: 18px; border-radius: 18px; 
@@ -85,7 +82,6 @@
         }
         .url-input:focus { border-color: #9d4edd; }
 
-        /* Плеер */
         .player-container { 
             width: 100%; max-width: 800px; position: relative; 
             background: #000; border-radius: 20px; overflow: hidden; 
@@ -95,12 +91,10 @@
         video { width: 100%; display: block; }
         .guest-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 80%; z-index: 10; display: none; }
     </style>
-    <!-- Подключаем клиент веб-сокетов -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 </head>
 <body>
 
-    <!-- Окно Авторизации -->
     <div class="modal-overlay" id="authModal">
         <div class="modal-box">
             <h2>Shark Cinema 🦈</h2>
@@ -111,21 +105,18 @@
         </div>
     </div>
 
-    <!-- Шапка сайта -->
     <div class="header">
         <h2>Shark Cinema</h2>
         <span id="roleBadge" class="badge badge-guest">Режим: Зритель</span>
     </div>
 
-    <!-- Панель управления для Овнера -->
     <div class="owner-panel" id="ownerPanel">
         <div class="url-input-group">
-            <input type="text" id="kinovibeUrl" class="url-input" placeholder="Вставь прямую ссылку на видео .mp4 / .m3u8...">
+            <input type="text" id="kinovibeUrl" class="url-input" placeholder="Вставь ссылку на страницу Kinovibe...">
             <button class="btn btn-owner" style="width: auto; padding: 0 22px; margin-bottom: 0;" onclick="loadMovie()">Загрузить</button>
         </div>
     </div>
 
-    <!-- Плеер -->
     <div class="player-container">
         <div class="guest-overlay" id="guestOverlay"></div>
         <video id="mainPlayer" controls playsinline poster="https://vjs.zencdn.net/v/oceans.png">
@@ -134,7 +125,7 @@
     </div>
 
     <script>
-        // Твоя сгенерированная WSS ссылка из терминала:
+        // ТВОЯ АКТИВНАЯ ССЫЛКА ИЗ ТЕРМИНАЛА VPS:
         const SERVER_URL = "https://0a8ea5b8cfd40a.lhr.life";
         const socket = io(SERVER_URL);
         const player = document.getElementById('mainPlayer');
@@ -169,8 +160,10 @@
         socket.on('sync_event', (data) => {
             ignoreNextSync = true;
             if (data.action === 'load') {
+                console.log("Получено распарсенное видео со страницы:", data.url);
                 player.src = data.url;
                 player.currentTime = 0;
+                player.play();
             } else if (data.action === 'play') {
                 if (Math.abs(player.currentTime - data.time) > 1) {
                     player.currentTime = data.time;
@@ -201,12 +194,12 @@
         function loadMovie() {
             const url = document.getElementById('kinovibeUrl').value.trim();
             if (!url) return alert('Вставь ссылку!');
-            player.src = url;
-            player.play();
+            
+            // ВАЖНО: Мы больше НЕ ставим player.src = url здесь! 
+            // Мы отправляем ссылку на VPS, VPS парсит видео и отдает его нам через sync_event!
             socket.emit('sync_action', { action: 'load', url: url });
         }
 
-        // Отправка событий от Овнера
         player.addEventListener('play', () => {
             if (isOwner && !ignoreNextSync) {
                 socket.emit('sync_action', { action: 'play', time: player.currentTime });
