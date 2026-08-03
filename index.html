@@ -3,66 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 (Kinovibe Browser)</title>
+    <title>Shark Cinema 🦈 v2.1</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        
         body { 
-            background: #0b0713; 
-            color: #e2dbf8; 
+            background: #0b0713; color: #e2dbf8; 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            min-height: 100vh; 
-            padding: 15px; 
+            display: flex; flex-direction: column; align-items: center; 
+            min-height: 100vh; padding: 15px; 
         }
-        
         .modal-overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(11, 7, 19, 0.95); 
-            backdrop-filter: blur(12px); 
-            display: flex; justify-content: center; align-items: center; 
-            z-index: 1000; 
+            background: rgba(11, 7, 19, 0.95); backdrop-filter: blur(12px); 
+            display: flex; justify-content: center; align-items: center; z-index: 1000; 
         }
         .modal-box { 
-            background: #171026; 
-            border: 1px solid #332252; 
-            padding: 30px 25px; 
-            border-radius: 24px; 
-            text-align: center; 
-            width: 90%; max-width: 380px; 
+            background: #171026; border: 1px solid #332252; padding: 30px 25px; 
+            border-radius: 24px; text-align: center; width: 90%; max-width: 380px; 
             box-shadow: 0 15px 35px rgba(123, 44, 191, 0.2); 
         }
         .modal-box h2 { margin-bottom: 10px; font-size: 24px; color: #c77dff; }
         .modal-box p { font-size: 14px; color: #9d8ec4; margin-bottom: 22px; }
-        
         .pin-input { 
-            width: 100%; padding: 14px; border-radius: 14px; 
-            border: 1px solid #3d2b63; background: #0f0a1c; 
-            color: #e2dbf8; font-size: 20px; text-align: center; 
+            width: 100%; padding: 14px; border-radius: 14px; border: 1px solid #3d2b63; 
+            background: #0f0a1c; color: #e2dbf8; font-size: 20px; text-align: center; 
             letter-spacing: 6px; margin-bottom: 15px; outline: none; 
-            transition: 0.3s;
         }
-        .pin-input:focus { border-color: #9d4edd; box-shadow: 0 0 15px rgba(157, 78, 221, 0.4); }
-
-        .btn { 
-            width: 100%; padding: 14px; border-radius: 14px; border: none; 
-            font-weight: bold; font-size: 15px; cursor: pointer; transition: 0.2s; 
-        }
-        .btn-owner { 
-            background: linear-gradient(135deg, #7b2cbf, #9d4edd); 
-            color: white; margin-bottom: 12px; 
-            box-shadow: 0 4px 15px rgba(123, 44, 191, 0.4);
-        }
-        .btn-guest { 
-            background: transparent; color: #9d8ec4; 
-            border: 1px solid #332252; 
-        }
-        .btn:active { transform: scale(0.98); }
-
+        .btn { width: 100%; padding: 14px; border-radius: 14px; border: none; font-weight: bold; font-size: 15px; cursor: pointer; }
+        .btn-owner { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: white; margin-bottom: 12px; }
+        .btn-guest { background: transparent; color: #9d8ec4; border: 1px solid #332252; }
         .header { width: 100%; max-width: 950px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
-        .header h2 { font-size: 22px; color: #e2dbf8; text-shadow: 0 0 10px rgba(199, 125, 255, 0.3); }
+        .header h2 { font-size: 22px; color: #e2dbf8; }
         .status-group { display: flex; gap: 8px; align-items: center; }
         .badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: bold; }
         .badge-owner { background: rgba(157, 78, 221, 0.2); color: #c77dff; border: 1px solid #9d4edd; }
@@ -70,37 +41,26 @@
         .badge-online { background: rgba(46, 213, 115, 0.2); color: #2ed573; border: 1px solid #2ed573; }
         .badge-offline { background: rgba(255, 71, 87, 0.2); color: #ff4757; border: 1px solid #ff4757; }
 
-        .owner-panel { 
-            width: 100%; max-width: 950px; background: #171026; 
-            border: 1px solid #332252; padding: 15px; border-radius: 18px; 
-            margin-bottom: 15px; display: none; 
-            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
-        }
-        .url-input-group { display: flex; gap: 10px; }
-        .url-input { 
-            flex: 1; padding: 12px 16px; border-radius: 12px; 
-            border: 1px solid #3d2b63; background: #0f0a1c; color: white; 
-            font-size: 14px; outline: none; 
-        }
-        .url-input:focus { border-color: #9d4edd; }
-
-        /* Окно браузера Киновайба */
-        .player-container { 
-            width: 100%; max-width: 950px; height: 600px; 
-            position: relative; background: #000; border-radius: 20px; 
-            overflow: hidden; border: 1px solid #2e1f47; 
-            box-shadow: 0 12px 40px rgba(123, 44, 191, 0.25); 
-        }
-        iframe { width: 100%; height: 100%; border: none; }
+        .view-mode { width: 100%; max-width: 950px; }
         
-        /* Щит от кликов для Зрителя */
-        .guest-overlay { 
+        .catalog-container { height: 600px; position: relative; background: #000; border-radius: 20px; overflow: hidden; border: 1px solid #2e1f47; }
+        iframe { width: 100%; height: 100%; border: none; }
+        .guest-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; background: transparent; }
+
+        .cinema-container { display: none; position: relative; background: #000; border-radius: 20px; overflow: hidden; border: 1px solid #2e1f47; }
+        video { width: 100%; display: block; }
+        .countdown-overlay { 
             position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            z-index: 100; display: none; background: transparent; 
+            background: rgba(11, 7, 19, 0.9); z-index: 200; display: none; 
+            flex-direction: column; justify-content: center; align-items: center; 
         }
-        @media (max-width: 600px) { .player-container { height: 400px; } }
+        .countdown-number { font-size: 80px; font-weight: bold; color: #c77dff; text-shadow: 0 0 20px rgba(199, 125, 255, 0.6); }
+
+        .cinema-tools { margin-top: 15px; display: flex; justify-content: space-between; align-items: center; }
+
+        @media (max-width: 600px) { .catalog-container { height: 400px; } }
     </style>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=2.1.0"></script>
 </head>
 <body>
 
@@ -115,122 +75,173 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema</h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v2.1</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Режим: Зритель</span>
         </div>
     </div>
 
-    <!-- Панель отправки страниц Kinovibe -->
-    <div class="owner-panel" id="ownerPanel">
-        <div class="url-input-group">
-            <input type="text" id="kinovibeUrl" class="url-input" placeholder="Вставь ссылку на страницу/серию с Kinovibe...">
-            <button class="btn btn-owner" style="width: auto; padding: 0 22px; margin-bottom: 0;" onclick="syncKinovibePage()">Синхронизировать</button>
+    <!-- РЕЖИМ 1: КАТАЛОГ -->
+    <div class="view-mode" id="catalogMode">
+        <div class="catalog-container">
+            <div class="guest-overlay" id="guestOverlay"></div>
+            <iframe id="proxyIframe" src="https://agile-enrich-grumpily.ngrok-free.dev/proxy?url=https://kinovibe.cc/"></iframe>
         </div>
     </div>
 
-    <div class="player-container">
-        <div class="guest-overlay" id="guestOverlay"></div>
-        <!-- По умолчанию НАВСЕГДА открыт только Kinovibe.cc -->
-        <iframe id="mainIframe" src="https://kinovibe.cc/" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+    <!-- РЕЖИМ 2: КИНОТЕАТР -->
+    <div class="view-mode" id="cinemaMode" style="display: none;">
+        <div class="cinema-container" id="cinemaBox" style="display: block;">
+            <div class="countdown-overlay" id="countdownOverlay">
+                <p style="color: #9d8ec4; font-size: 18px; margin-bottom: 10px;">Синхронный старт через:</p>
+                <div class="countdown-number" id="countdownNum">5</div>
+            </div>
+            <video id="cinemaPlayer" controls playsinline></video>
+        </div>
+        <div class="cinema-tools" id="ownerTools" style="display: none;">
+            <button class="btn btn-guest" style="width: auto; padding: 10px 20px;" onclick="exitCinema()">⬅ Вернуться в каталог Киновайба</button>
+        </div>
     </div>
 
     <script>
+        const VERSION = "2.1.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         
         const socket = io(SERVER_URL, {
             transports: ['websocket'],
-            extraHeaders: {
-                "ngrok-skip-browser-warning": "true"
-            }
+            query: { v: VERSION },
+            extraHeaders: { "ngrok-skip-browser-warning": "true" }
         });
 
-        const iframe = document.getElementById('mainIframe');
+        const catalogMode = document.getElementById('catalogMode');
+        const cinemaMode = document.getElementById('cinemaMode');
+        const cinemaPlayer = document.getElementById('cinemaPlayer');
+        const countdownOverlay = document.getElementById('countdownOverlay');
+        const countdownNum = document.getElementById('countdownNum');
+        
         let isOwner = false;
+        let ignoreNextSync = false;
 
         socket.on('connect', () => {
-            console.log("[✅] WebSocket подключен!");
             const serverBadge = document.getElementById('serverBadge');
             serverBadge.className = 'badge badge-online';
-            serverBadge.innerText = '🟢 Сервер: На связи';
+            serverBadge.innerText = '🟢 На связи (v2.1)';
         });
 
         socket.on('disconnect', () => {
-            console.log("[❌] Офлайн");
             const serverBadge = document.getElementById('serverBadge');
             serverBadge.className = 'badge badge-offline';
-            serverBadge.innerText = '🔴 Сервер: Офлайн';
+            serverBadge.innerText = '🔴 Офлайн';
         });
 
         socket.on('auth_result', (data) => {
-            const loginBtn = document.getElementById('loginBtn');
-            loginBtn.innerText = "Войти как Owner";
-            loginBtn.disabled = false;
+            document.getElementById('loginBtn').innerText = "Войти как Owner";
+            document.getElementById('loginBtn').disabled = false;
 
             if (data.success) {
                 isOwner = true;
                 document.getElementById('authModal').style.display = 'none';
-                document.getElementById('ownerPanel').style.display = 'block';
                 document.getElementById('roleBadge').className = 'badge badge-owner';
                 document.getElementById('roleBadge').innerText = 'Режим: Owner 👑';
+                document.getElementById('ownerTools').style.display = 'flex';
             } else {
-                alert(data.message || 'Неверный ПИН!');
+                alert('Неверный ПИН!');
             }
         });
 
-        // Как только Зритель заходит — ему сразу подгружается та страница Киновайба, которую смотрит Овнер
-        socket.on('room_state', (state) => {
-            if (!isOwner && state.current_url && iframe.src !== state.current_url) {
-                console.log("[🎬] Зритель подгружает Киновайб Овнера:", state.current_url);
-                iframe.src = state.current_url;
+        // ДЕТЕКТОР КЛИКОВ: Перехватываем видео из прокси-Iframe
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'VIDEO_DETECTED') {
+                console.log("[🎯 ДЕТЕКТОР] Видео подхвачено:", event.data.url);
+                if (isOwner) {
+                    socket.emit('sync_action', { action: 'cinema_load', url: event.data.url });
+                }
             }
+        });
+
+        socket.on('cinema_start', (data) => {
+            catalogMode.style.display = 'none';
+            cinemaMode.style.display = 'block';
+            cinemaPlayer.src = data.url;
+            
+            // Обратный отсчет 5 секунд для гарантии загрузки у обоих
+            countdownOverlay.style.display = 'flex';
+            let count = 5;
+            countdownNum.innerText = count;
+
+            let interval = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    countdownNum.innerText = count;
+                } else {
+                    clearInterval(interval);
+                    countdownOverlay.style.display = 'none';
+                    cinemaPlayer.play();
+                }
+            }, 1000);
+        });
+
+        socket.on('cinema_exit', () => {
+            cinemaPlayer.pause();
+            cinemaPlayer.src = "";
+            cinemaMode.style.display = 'none';
+            catalogMode.style.display = 'block';
         });
 
         socket.on('sync_event', (data) => {
-            if (data.action === 'load') {
-                console.log("[🎬] Переключение страницы Киновайба:", data.url);
-                iframe.src = data.url;
+            ignoreNextSync = true;
+            if (data.action === 'play') {
+                if (Math.abs(cinemaPlayer.currentTime - data.time) > 1) {
+                    cinemaPlayer.currentTime = data.time;
+                }
+                cinemaPlayer.play();
+            } else if (data.action === 'pause') {
+                cinemaPlayer.currentTime = data.time;
+                cinemaPlayer.pause();
+            } else if (data.action === 'seek') {
+                cinemaPlayer.currentTime = data.time;
+            }
+            setTimeout(() => { ignoreNextSync = false; }, 300);
+        });
+
+        cinemaPlayer.addEventListener('play', () => {
+            if (isOwner && !ignoreNextSync) {
+                socket.emit('sync_action', { action: 'play', time: cinemaPlayer.currentTime });
             }
         });
+
+        cinemaPlayer.addEventListener('pause', () => {
+            if (isOwner && !ignoreNextSync) {
+                socket.emit('sync_action', { action: 'pause', time: cinemaPlayer.currentTime });
+            }
+        });
+
+        cinemaPlayer.addEventListener('seeked', () => {
+            if (isOwner && !ignoreNextSync) {
+                socket.emit('sync_action', { action: 'seek', time: cinemaPlayer.currentTime });
+            }
+        });
+
+        function exitCinema() {
+            if (isOwner) {
+                socket.emit('sync_action', { action: 'exit_cinema' });
+            }
+        }
 
         function loginOwner() {
             const pinInput = document.getElementById('pinInput').value.trim();
             if (!pinInput) return alert('Введи 8-значный ПИН!');
-
-            const loginBtn = document.getElementById('loginBtn');
-            loginBtn.innerText = "Проверка ПИНа...";
-            loginBtn.disabled = true;
-
-            if (!socket.connected) {
-                setTimeout(() => {
-                    if (!socket.connected) {
-                        loginBtn.innerText = "Войти как Owner";
-                        loginBtn.disabled = false;
-                        alert("🔴 Ошибка связи с VPS сервером!");
-                    } else {
-                        socket.emit('auth_owner', { pin: pinInput });
-                    }
-                }, 1000);
-            } else {
-                socket.emit('auth_owner', { pin: pinInput });
-            }
+            document.getElementById('loginBtn').innerText = "Проверка ПИНа...";
+            document.getElementById('loginBtn').disabled = true;
+            socket.emit('auth_owner', { pin: pinInput });
         }
 
         function loginGuest() {
             document.getElementById('authModal').style.display = 'none';
             document.getElementById('roleBadge').className = 'badge badge-guest';
             document.getElementById('roleBadge').innerText = 'Режим: Зритель 👁️';
-            // Включаем щит: Зритель только смотрит и не может нажимать на Kinovibe
             document.getElementById('guestOverlay').style.display = 'block';
-        }
-
-        function syncKinovibePage() {
-            const url = document.getElementById('kinovibeUrl').value.trim();
-            if (!url) return alert('Вставь ссылку на страницу/серию с Kinovibe!');
-            
-            iframe.src = url;
-            socket.emit('sync_action', { action: 'load', url: url });
         }
     </script>
 </body>
