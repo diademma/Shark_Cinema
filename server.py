@@ -115,31 +115,61 @@ async def proxy_video(request):
 
 app.router.add_get('/proxy_video', proxy_video)
 
+# --- НЕУБИВАЕМЫЙ ПАРСЕР ПЛЕЙЛИСТА PLAYERJS С ЗАЩИТОЙ ОТ BOM И REGEX FALLBACK ---
 async def fetch_playerjs_playlist(session, pl_url):
     try:
         headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://kinovibe.cc/"}
         async with session.get(pl_url, headers=headers, cookies=kv_cookies, timeout=8) as resp:
-            text = await resp.text()
+            raw_bytes = await resp.read()
             
-            if not text.strip().startswith('[') and not text.strip().startswith('{'):
-                cleaned = re.sub(r'^#[0-9]', '', text.strip())
-                text = base64.b64decode(cleaned).decode('utf-8', errors='ignore')
+            # Декодирование c очисткой BOM (\ufeff)
+            try:
+                text = raw_bytes.decode('utf-8-sig', errors='ignore')
+            except Exception:
+                text = raw_bytes.decode('cp1251', errors='ignore')
 
-            data = json.loads(text)
-            raw_list = data.get("playlist", []) if isinstance(data, dict) else data
-            
+            # Очищаем невидимые управляющие символы
+            clean_text = re.sub(r'[\x00-\x1f\x7f-\x9f\ufeff]', '', text).strip()
+
+            if not clean_text.startswith('[') and not clean_text.startswith('{'):
+                b64_clean = re.sub(r'^#[0-9a-zA-Z]+', '', clean_text)
+                b64_clean = re.sub(r'[\r\n\s]', '', b64_clean)
+                try:
+                    clean_text = base64.b64decode(b64_clean).decode('utf-8-sig', errors='ignore')
+                    clean_text = re.sub(r'[\x00-\x1f\x7f-\x9f\ufeff]', '', clean_text)
+                except Exception: pass
+
             playlist = []
-            for item in raw_list:
-                if isinstance(item, dict) and "file" in item:
-                    raw_comment = item.get("comment", "")
-                    clean_title = re.sub(r'<[^>]+>', ' ', raw_comment).strip()
-                    if not clean_title:
-                        clean_title = f"{len(playlist)+1} Серия"
-                        
-                    playlist.append({
-                        "title": clean_title,
-                        "url": item["file"]
-                    })
+
+            # 1. Попытка через стандартный JSON
+            try:
+                data = json.loads(clean_text)
+                raw_list = data.get("playlist", []) if isinstance(data, dict) else data
+                for item in raw_list:
+                    if isinstance(item, dict) and "file" in item:
+                        raw_comment = item.get("comment", "")
+                        clean_title = re.sub(r'<[^>]+>', ' ', raw_comment)
+                        clean_title = re.sub(r'[^\w\s\d\[\]\(\)\-\.]', '', clean_title).strip()
+                        if not clean_title:
+                            clean_title = f"{len(playlist)+1} Серия"
+                        playlist.append({"title": clean_title, "url": item["file"]})
+            except Exception as json_err:
+                print(f"[⚠️] JSON parse failed on corrupt bytes: {json_err}. Switching to Regex Fallback!")
+
+            # 2. НЕУБИВАЕМЫЙ REGEX FALLBACK (Если в текстах загнездились битые символы)
+            if not playlist:
+                entries = re.findall(r'"file"\s*:\s*"([^"]+)"', text)
+                comments = re.findall(r'"comment"\s*:\s*"([^"]+)"', text)
+                
+                for idx, file_url in enumerate(entries):
+                    title = f"{idx+1} Серия"
+                    if idx < len(comments):
+                        raw_c = comments[idx]
+                        clean_c = re.sub(r'<[^>]+>', ' ', raw_c)
+                        clean_c = re.sub(r'[^\w\s\d\[\]\(\)\-\.]', '', clean_c).strip()
+                        if clean_c: title = clean_c
+                    playlist.append({"title": title, "url": file_url})
+
             return playlist
     except Exception as e:
         print(f"[❌] Error reading Playerjs playlist: {e}")
@@ -164,7 +194,6 @@ async def auth_owner(sid, data):
     else:
         await sio.emit('auth_result', {'success': False}, to=sid)
 
-# --- АВТОРИЗАЦИЯ KINOVIBE ДЛЯ 720p/1080p HD ---
 @sio.event
 async def kinovibe_login(sid, data):
     global kv_cookies
@@ -253,7 +282,7 @@ async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Auto-HD v5.3 сканирует...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'BOM-Proof v5.4 сканирует...', 'details': url}, to=sid)
 
     try:
         headers = {
