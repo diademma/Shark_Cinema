@@ -115,20 +115,17 @@ async def proxy_video(request):
 
 app.router.add_get('/proxy_video', proxy_video)
 
-# --- НЕУБИВАЕМЫЙ ПАРСЕР ПЛЕЙЛИСТА PLAYERJS С ЗАЩИТОЙ ОТ BOM И REGEX FALLBACK ---
 async def fetch_playerjs_playlist(session, pl_url):
     try:
         headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://kinovibe.cc/"}
         async with session.get(pl_url, headers=headers, cookies=kv_cookies, timeout=8) as resp:
             raw_bytes = await resp.read()
             
-            # Декодирование c очисткой BOM (\ufeff)
             try:
                 text = raw_bytes.decode('utf-8-sig', errors='ignore')
             except Exception:
                 text = raw_bytes.decode('cp1251', errors='ignore')
 
-            # Очищаем невидимые управляющие символы
             clean_text = re.sub(r'[\x00-\x1f\x7f-\x9f\ufeff]', '', text).strip()
 
             if not clean_text.startswith('[') and not clean_text.startswith('{'):
@@ -141,7 +138,6 @@ async def fetch_playerjs_playlist(session, pl_url):
 
             playlist = []
 
-            # 1. Попытка через стандартный JSON
             try:
                 data = json.loads(clean_text)
                 raw_list = data.get("playlist", []) if isinstance(data, dict) else data
@@ -156,7 +152,6 @@ async def fetch_playerjs_playlist(session, pl_url):
             except Exception as json_err:
                 print(f"[⚠️] JSON parse failed on corrupt bytes: {json_err}. Switching to Regex Fallback!")
 
-            # 2. НЕУБИВАЕМЫЙ REGEX FALLBACK (Если в текстах загнездились битые символы)
             if not playlist:
                 entries = re.findall(r'"file"\s*:\s*"([^"]+)"', text)
                 comments = re.findall(r'"comment"\s*:\s*"([^"]+)"', text)
@@ -282,7 +277,7 @@ async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'BOM-Proof v5.4 сканирует...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Guest PiP v5.5 сканирует...', 'details': url}, to=sid)
 
     try:
         headers = {
