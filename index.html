@@ -63,12 +63,13 @@
             background: linear-gradient(135deg, #ffffff 0%, #c77dff 50%, #9d4edd 100%);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
         }
-        .status-group { display: flex; gap: 10px; align-items: center; }
+        .status-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
         .badge { padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; }
         .badge-owner { background: rgba(157, 78, 221, 0.2); color: #c77dff; border: 1px solid #9d4edd; }
         .badge-guest { background: rgba(114, 9, 183, 0.2); color: #b5179e; border: 1px solid #7209b7; }
         .badge-online { background: rgba(46, 213, 115, 0.15); color: #2ed573; border: 1px solid rgba(46, 213, 115, 0.4); }
         .badge-offline { background: rgba(255, 71, 87, 0.15); color: #ff4757; border: 1px solid rgba(255, 71, 87, 0.4); }
+        .badge-beacon { background: rgba(0, 210, 211, 0.15); color: #00d2d3; border: 1px solid rgba(0, 210, 211, 0.4); display: none; }
 
         .owner-panel { 
             width: 100%; max-width: 950px; background: #171026; 
@@ -173,7 +174,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } .countdown-num { font-size: 100px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=6.1.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=6.3.0"></script>
 </head>
 <body>
 
@@ -193,6 +194,7 @@
         <div class="logo-title">Shark Cinema 🦈</div>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
+            <span id="beaconBadge" class="badge badge-beacon">🎧 MediaSession ОС</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
         </div>
     </div>
@@ -272,11 +274,9 @@
     </div>
 
     <script>
-        const VERSION = "6.1.0";
+        const VERSION = "6.3.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
-
-        // Запоминание сохраненного ПИНа в браузере
         let pendingOwnerPin = localStorage.getItem('shark_owner_pin') || null;
 
         function addLog(type, msg, details = '') {
@@ -318,6 +318,37 @@
         let ignoreNextEvent = false;
         let currentPlaylist = [];
         let currentEpIndex = 0;
+        let currentMediaTitle = "";
+
+        // === 🎧 МАЯЧОК MEDIASESSION (Регистрация в шторке ОС) ===
+        function setupMediaSession() {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: currentMediaTitle || 'Shark Cinema Live',
+                    artist: 'TrueSync HD Active',
+                    album: 'Фоновый удержатель ОС',
+                    artwork: [
+                        { src: 'https://cdn-icons-png.flaticon.com/512/3172/3172522.png', sizes: '512x512', type: 'image/png' }
+                    ]
+                });
+                navigator.mediaSession.setActionHandler('play', () => { if (isOwner) video.play(); });
+                navigator.mediaSession.setActionHandler('pause', () => { if (isOwner) video.pause(); });
+
+                document.getElementById('beaconBadge').style.display = 'inline-flex';
+                addLog('SUCCESS', '🎧 MediaSession МАЯЧОК активирован в ОС!');
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                addLog('INFO', 'Вкладка ушла в фоновый режим / PiP');
+            } else {
+                addLog('INFO', 'Вкладка вернулась в активный режим');
+                if (isOwner && !video.paused) {
+                    ignoreNextEvent = true;
+                }
+            }
+        });
 
         async function togglePiP() {
             try {
@@ -368,14 +399,12 @@
         guestOverlay.addEventListener('touchend', handleDoubleTap);
         guestOverlay.addEventListener('dblclick', toggleFullscreen);
 
-        // === МГНОВЕННОЕ ПОДКЛЮЧЕНИЕ И АВТО-ВХОД ===
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             const badge = document.getElementById('serverBadge');
             badge.className = 'badge badge-online';
             badge.innerText = '💚 На связи';
 
-            // Авторизуем овнера автоматически, если ПИН сохранен
             if (pendingOwnerPin) {
                 addLog('INFO', 'Авторизация сохраненного Овнера...');
                 socket.emit('auth_owner', { pin: pendingOwnerPin });
@@ -398,10 +427,14 @@
                 document.getElementById('roleBadge').className = 'badge badge-owner';
                 document.getElementById('roleBadge').innerText = 'Owner 👑';
                 document.querySelector('.log-console-bar').style.display = 'block';
+
+                if (currentPlaylist.length > 0) {
+                    document.getElementById('syncStartBtn').style.display = 'inline-flex';
+                }
             } else {
                 pendingOwnerPin = null;
                 localStorage.removeItem('shark_owner_pin');
-                addLog('ERROR', 'Отказ авторизации! Неверный ПИН');
+                addLog('ERROR', 'Отказ авторизации!');
                 alert('Неверный ПИН-код Овнера!');
             }
         });
@@ -424,40 +457,23 @@
             }
             if (state.playlist && state.playlist.length > 0) {
                 renderPlaylist(state.playlist, state.current_ep_index || 0, state.media_title || "");
+                if (isOwner) {
+                    document.getElementById('syncStartBtn').style.display = 'inline-flex';
+                }
             }
             if (state.mode === 'iframe' && iframe.src !== state.current_url) {
                 iframe.src = state.current_url;
                 switchToIframe();
             } else if (state.mode === 'video' && state.current_url) {
                 loadRawVideo(state.current_url, false);
+                
+                // ОБРАТНАЯ СИНХРОНИЗАЦИЯ: Если Овнер переподключается, а фильм играет
                 if (!isOwner) {
-                    addLog('INFO', 'Синхронизация времени с Овнером...');
+                    addLog('INFO', 'Гость готов сообщить время Овнеру при перезаходе...');
                     socket.emit('guest_ready_sync');
                 }
             }
         });
-
-        function loginOwner() {
-            const pin = document.getElementById('pinInput').value.trim();
-            if (!pin) return alert('Введи ПИН!');
-
-            pendingOwnerPin = pin;
-            const btn = document.getElementById('loginBtn');
-            btn.innerText = "⏳ Проверка ПИНа...";
-            btn.disabled = true;
-
-            if (socket.connected) {
-                socket.emit('auth_owner', { pin: pin });
-            } else {
-                addLog('WARN', 'Ожидание подключения сокета к VPS...');
-            }
-        }
-
-        function loginGuest() {
-            document.getElementById('authModal').style.display = 'none';
-            document.getElementById('guestOverlay').style.display = 'block';
-            addLog('INFO', 'Вход зрителя.');
-        }
 
         function connectKinovibeHD() {
             const login = document.getElementById('kvLogin').value.trim();
@@ -500,8 +516,11 @@
             } else {
                 video.src = rawUrl;
             }
+            
+            setupMediaSession();
         }
 
+        // ОБРАТНАЯ СИНХРОНИЗАЦИЯ ПРИ ПЕРЕЗАХОДЕ ОВНЕРА (Guest -> Owner Sync)
         socket.on('request_owner_time', (data) => {
             if (isOwner) {
                 socket.emit('owner_time_response', {
@@ -509,6 +528,29 @@
                     time: video.currentTime,
                     paused: video.paused
                 });
+            }
+        });
+
+        // Запрос времени от Гостя, если Овнер переподключился
+        socket.on('request_guest_time_for_owner', () => {
+            if (!isOwner && !video.paused) {
+                addLog('INFO', 'Отправка текущей секунды переподключившемуся Овнеру:', video.currentTime);
+                socket.emit('guest_time_report', {
+                    time: video.currentTime,
+                    paused: video.paused
+                });
+            }
+        });
+
+        socket.on('apply_owner_catchup', (data) => {
+            if (isOwner) {
+                ignoreNextEvent = true;
+                const targetTime = data.time + (data.paused ? 0 : 1.0); // Подтягиваем Овнера к Гостю + 1 сек
+                video.currentTime = targetTime;
+                if (!data.paused) {
+                    video.play().catch(e => console.log(e));
+                }
+                addLog('SUCCESS', 'Овнер подтянулся к Гостю!', `Время: ${targetTime.toFixed(1)}с`);
             }
         });
 
@@ -590,21 +632,50 @@
         });
 
         video.addEventListener('play', () => {
-            if (isOwner && !ignoreNextEvent) socket.emit('player_action', { action: 'play', time: video.currentTime });
+            if (isOwner && !ignoreNextEvent && !document.hidden) {
+                socket.emit('player_action', { action: 'play', time: video.currentTime });
+            }
             ignoreNextEvent = false;
         });
         video.addEventListener('pause', () => {
-            if (isOwner && !ignoreNextEvent) socket.emit('player_action', { action: 'pause', time: video.currentTime });
+            if (isOwner && !ignoreNextEvent && !document.hidden) {
+                socket.emit('player_action', { action: 'pause', time: video.currentTime });
+            }
             ignoreNextEvent = false;
         });
         video.addEventListener('seeked', () => {
-            if (isOwner && !ignoreNextEvent) socket.emit('player_action', { action: 'seek', time: video.currentTime });
+            if (isOwner && !ignoreNextEvent && !document.hidden) {
+                socket.emit('player_action', { action: 'seek', time: video.currentTime });
+            }
             ignoreNextEvent = false;
         });
+
+        function loginOwner() {
+            const pin = document.getElementById('pinInput').value.trim();
+            if (!pin) return alert('Введи ПИН!');
+
+            pendingOwnerPin = pin;
+            const btn = document.getElementById('loginBtn');
+            btn.innerText = "⏳ Проверка ПИНа...";
+            btn.disabled = true;
+
+            if (socket.connected) {
+                socket.emit('auth_owner', { pin: pin });
+            } else {
+                addLog('WARN', 'Ожидание подключения сокета к VPS...');
+            }
+        }
+
+        function loginGuest() {
+            document.getElementById('authModal').style.display = 'none';
+            document.getElementById('guestOverlay').style.display = 'block';
+            addLog('INFO', 'Вход зрителя.');
+        }
 
         function renderPlaylist(playlist, activeIndex = 0, mediaTitle = "") {
             currentPlaylist = playlist;
             currentEpIndex = activeIndex;
+            currentMediaTitle = mediaTitle;
             
             const panel = document.getElementById('seriesPanel');
             const grid = document.getElementById('seriesGrid');
@@ -616,6 +687,8 @@
             const activeEpName = playlist[activeIndex] ? playlist[activeIndex].title : "";
             const displayTitle = mediaTitle ? `${mediaTitle} • ${activeEpName}` : activeEpName;
             titleEl.innerText = displayTitle;
+
+            setupMediaSession();
 
             playlist.forEach((ep, idx) => {
                 const btn = document.createElement('button');
@@ -639,9 +712,10 @@
             }
         }
 
+        // КНОПКА «ОТКРЫТЬ САЙТ» (Если пусто -> открывает https://kinovibe.cc/)
         function loadIframe() {
-            const url = document.getElementById('targetUrl').value.trim();
-            if (!url) return alert('Вставь ссылку!');
+            const inputVal = document.getElementById('targetUrl').value.trim();
+            const url = inputVal ? inputVal : 'https://kinovibe.cc/';
             iframe.src = url;
             switchToIframe();
             socket.emit('player_action', { action: 'load_iframe', url: url });
@@ -651,7 +725,7 @@
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку!');
             document.getElementById('syncStartBtn').style.display = 'none';
-            addLog('INFO', 'Запуск Instant Auth v6.1...', url);
+            addLog('INFO', 'Запуск v6.3 MediaBeacon...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
