@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v5.5 Guest PiP</title>
+    <title>Shark Cinema 🦈</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
             background: #0b0713; color: #e2dbf8; 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
             display: flex; flex-direction: column; align-items: center; 
-            min-height: 100vh; padding: 15px; padding-bottom: 80px; 
+            min-height: 100vh; padding: 20px 15px; padding-bottom: 80px; 
         }
 
         .error-toast { 
@@ -38,43 +38,66 @@
             background: #0f0a1c; color: #e2dbf8; font-size: 20px; text-align: center; 
             letter-spacing: 6px; margin-bottom: 15px; outline: none; 
         }
-        .btn { width: 100%; padding: 14px; border-radius: 14px; border: none; font-weight: bold; font-size: 15px; cursor: pointer; transition: 0.2s; }
-        .btn:hover { opacity: 0.9; }
-        .btn-owner { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: white; margin-bottom: 12px; }
-        .btn-guest { background: transparent; color: #9d8ec4; border: 1px solid #332252; }
-        .btn-magic { background: linear-gradient(135deg, #ff9f43, #ee5253); color: white; border: none; }
-        .btn-sync { background: linear-gradient(135deg, #2ed573, #1e90ff); color: white; border: none; display: none; }
+        .btn { padding: 12px 20px; border-radius: 12px; border: none; font-weight: bold; font-size: 14px; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+        .btn-owner { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: white; width: 100%; margin-bottom: 12px; }
+        .btn-guest { background: transparent; color: #9d8ec4; border: 1px solid #332252; width: 100%; }
         
-        .header { width: 100%; max-width: 950px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
-        .header h2 { font-size: 22px; color: #e2dbf8; }
-        .status-group { display: flex; gap: 8px; align-items: center; }
-        .badge { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+        /* Единый стиль кнопок управления */
+        .btn-action { 
+            background: #231738; color: #e2dbf8; border: 1px solid #3d2b63; 
+            flex: 1; min-width: 180px; padding: 13px 18px;
+        }
+        .btn-action:hover { border-color: #9d4edd; color: white; }
+        .btn-magic { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: white; border: none; }
+        .btn-sync { background: linear-gradient(135deg, #2ed573, #10ac84); color: white; border: none; display: none; }
+
+        /* Центрированный Элитный Заголовок */
+        .header-container { 
+            width: 100%; max-width: 950px; display: flex; flex-direction: column; 
+            align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px; 
+            background: rgba(23, 16, 38, 0.6); border: 1px solid #332252; 
+            backdrop-filter: blur(12px); padding: 18px 24px; border-radius: 20px; 
+            box-shadow: 0 10px 30px rgba(123, 44, 191, 0.15); 
+        }
+        .logo-title { 
+            font-size: 28px; font-weight: 800; letter-spacing: 1px;
+            background: linear-gradient(135deg, #ffffff 0%, #c77dff 50%, #9d4edd 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .status-group { display: flex; gap: 10px; align-items: center; }
+        .badge { padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: bold; display: inline-flex; align-items: center; gap: 6px; }
         .badge-owner { background: rgba(157, 78, 221, 0.2); color: #c77dff; border: 1px solid #9d4edd; }
         .badge-guest { background: rgba(114, 9, 183, 0.2); color: #b5179e; border: 1px solid #7209b7; }
-        .badge-online { background: rgba(46, 213, 115, 0.2); color: #2ed573; border: 1px solid #2ed573; }
-        .badge-offline { background: rgba(255, 71, 87, 0.2); color: #ff4757; border: 1px solid #ff4757; }
+        .badge-online { background: rgba(46, 213, 115, 0.15); color: #2ed573; border: 1px solid rgba(46, 213, 115, 0.4); }
+        .badge-offline { background: rgba(255, 71, 87, 0.15); color: #ff4757; border: 1px solid rgba(255, 71, 87, 0.4); }
 
         .owner-panel { 
             width: 100%; max-width: 950px; background: #171026; 
-            border: 1px solid #332252; padding: 15px; border-radius: 18px; 
-            margin-bottom: 15px; display: none; box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            border: 1px solid #332252; padding: 18px; border-radius: 20px; 
+            margin-bottom: 20px; display: none; box-shadow: 0 8px 25px rgba(0,0,0,0.3);
         }
-        .controls-row { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+        .controls-row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
         .url-input { 
-            flex: 1; padding: 12px 16px; border-radius: 12px; 
+            flex: 1; padding: 13px 18px; border-radius: 12px; 
             border: 1px solid #3d2b63; background: #0f0a1c; color: white; 
-            font-size: 14px; outline: none; min-width: 200px;
+            font-size: 14px; outline: none; min-width: 250px; transition: 0.2s;
         }
+        .url-input:focus { border-color: #9d4edd; box-shadow: 0 0 15px rgba(157, 78, 221, 0.3); }
 
         .series-panel {
             width: 100%; max-width: 950px; background: #171026;
-            border: 1px solid #332252; padding: 15px; border-radius: 18px;
-            margin-bottom: 15px; display: none; box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            border: 1px solid #332252; padding: 18px; border-radius: 20px;
+            margin-bottom: 20px; display: none; box-shadow: 0 8px 25px rgba(0,0,0,0.3);
         }
         .series-header {
             display: flex; justify-content: space-between; align-items: center;
-            margin-bottom: 12px; font-weight: bold; color: #c77dff; flex-wrap: wrap; gap: 10px;
+            margin-bottom: 12px; flex-wrap: wrap; gap: 10px;
         }
+        .media-title-box { display: flex; align-items: center; gap: 8px; font-weight: bold; }
+        .title-label { color: #9d8ec4; font-size: 13px; }
+        .title-text { color: #c77dff; font-size: 16px; font-weight: 800; }
+        
         .series-grid {
             display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden;
             padding: 6px 2px; white-space: nowrap; -webkit-overflow-scrolling: touch;
@@ -96,42 +119,28 @@
 
         .player-container { 
             width: 100%; max-width: 950px; height: 600px; 
-            position: relative; background: #000; border-radius: 20px; 
+            position: relative; background: #000; border-radius: 24px; 
             overflow: hidden; border: 1px solid #2e1f47; 
             box-shadow: 0 12px 40px rgba(123, 44, 191, 0.25); 
         }
         iframe { width: 100%; height: 100%; border: none; }
         video { width: 100%; height: 100%; background: #000; display: none; outline: none; }
         
-        /* 🛡 Глухой защитный щит от кликов гостя (z-index 100) */
         .guest-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; background: transparent; }
 
-        /* 🟣 Фиолетовые плавающие кнопки поверх щита (z-index 300) */
+        /* Векторные фиолетовые кнопки плавающего контроля */
         .floating-player-controls {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            z-index: 300;
-            display: flex;
-            gap: 8px;
+            position: absolute; top: 15px; right: 15px; z-index: 300; display: flex; gap: 8px;
         }
         .btn-floating {
             background: linear-gradient(135deg, rgba(123, 44, 191, 0.85), rgba(157, 78, 221, 0.85));
-            color: white;
-            border: 1px solid rgba(199, 125, 255, 0.4);
-            padding: 8px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-            cursor: pointer;
-            backdrop-filter: blur(8px);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-            transition: all 0.2s ease;
-            display: none; /* Видимы когда включен видеоплеер */
+            color: white; border: 1px solid rgba(199, 125, 255, 0.4); padding: 8px 16px;
+            border-radius: 20px; font-size: 12px; font-weight: bold; cursor: pointer;
+            backdrop-filter: blur(8px); box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            transition: all 0.2s ease; display: none; align-items: center; gap: 6px;
         }
         .btn-floating:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(157, 78, 221, 0.6);
+            transform: translateY(-2px); box-shadow: 0 6px 20px rgba(157, 78, 221, 0.6);
             background: linear-gradient(135deg, #7b2cbf, #9d4edd);
         }
 
@@ -151,6 +160,7 @@
         .log-console-bar {
             position: fixed; bottom: 0; left: 0; width: 100%; background: #120e24; 
             border-top: 1px solid #332252; z-index: 8000; font-family: monospace; font-size: 11px;
+            display: none; /* Скрыто по умолчанию для Зрителей */
         }
         .log-header {
             padding: 10px 15px; background: #1a1433; display: flex; justify-content: space-between; 
@@ -166,7 +176,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } .countdown-num { font-size: 100px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=5.5.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=6.0.0"></script>
 </head>
 <body>
 
@@ -182,8 +192,9 @@
         </div>
     </div>
 
-    <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v5.5 Guest PiP</small></h2>
+    <!-- Центрированный Элитный Заголовок -->
+    <div class="header-container">
+        <div class="logo-title">Shark Cinema 🦈</div>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -195,25 +206,37 @@
             <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка Kinovibe (Фильм, Сериал или Аниме)">
         </div>
         <div class="controls-row">
-            <button class="btn btn-owner" style="width: auto; padding: 0 15px;" onclick="loadIframe()">🌐 Открыть сайт</button>
-            <button class="btn btn-magic" style="width: auto; padding: 0 15px;" onclick="extractVideo()">🚀 Открыть в Плеере (SyncPlay)</button>
-            <button class="btn btn-sync" id="syncStartBtn" style="width: auto; padding: 0 20px;" onclick="startSyncCountdown()">⏱ Синхронный Старт</button>
+            <button class="btn btn-action" onclick="loadIframe()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                Открыть сайт
+            </button>
+            <button class="btn btn-action btn-magic" onclick="extractVideo()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                Открыть в Плеере (SyncPlay)
+            </button>
+            <button class="btn btn-action btn-sync" id="syncStartBtn" onclick="startSyncCountdown()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Синхронный Старт
+            </button>
         </div>
 
-        <div style="margin-top: 15px; border-top: 1px solid #332252; padding-top: 10px;">
-            <small style="color: #9d8ec4; display: block; margin-bottom: 5px;">🔑 Аккаунт Kinovibe (для разблокировки 720p/1080p HD):</small>
+        <!-- Авторизация Kinovibe (Скрывается если уже подключено) -->
+        <div id="kvAuthBox" style="margin-top: 15px; border-top: 1px solid #332252; padding-top: 12px;">
+            <small style="color: #9d8ec4; display: block; margin-bottom: 8px;">🔑 Подключение аккаунта Kinovibe (для разблокировки HD):</small>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <input type="text" id="kvLogin" class="url-input" placeholder="Логин Kinovibe">
                 <input type="password" id="kvPass" class="url-input" placeholder="Пароль Kinovibe">
-                <button class="btn btn-owner" style="width: auto; padding: 0 15px; margin-bottom:0;" onclick="connectKinovibeHD()">🔑 Подключить HD</button>
+                <button class="btn btn-action btn-magic" style="flex:0; min-width: 160px;" onclick="connectKinovibeHD()">Подключить HD</button>
             </div>
-            <span id="kvStatus" style="font-size: 11px; color: #2ed573; display: none; margin-top: 5px; font-weight: bold;">🟢 HD Аккаунт подключен! Все фильмы загружаются в 720p/1080p!</span>
         </div>
     </div>
 
     <div class="series-panel" id="seriesPanel">
         <div class="series-header">
-            <span id="currentEpTitle">🎬 Найдено: 0</span>
+            <div class="media-title-box">
+                <span class="title-label">Сейчас идет:</span>
+                <span class="title-text" id="mediaTitleText">Загрузка...</span>
+            </div>
             <div style="display: flex; gap: 8px;">
                 <button class="btn-nav-ep" id="prevEpBtn" onclick="switchEpRelative(-1)">◀ Пред.</button>
                 <button class="btn-nav-ep" id="nextEpBtn" onclick="switchEpRelative(1)">След. ▶</button>
@@ -223,13 +246,18 @@
     </div>
 
     <div class="player-container">
-        <!-- 🛡 Глухой защитный щит для Гостя -->
         <div class="guest-overlay" id="guestOverlay"></div>
 
-        <!-- 🟣 Плавающие фиолетовые кнопки для Зрителя/Овнера -->
+        <!-- Векторные плавающие кнопки -->
         <div class="floating-player-controls">
-            <button class="btn-floating" id="pipBtn" onclick="togglePiP()">🖼️ Окошко (PiP)</button>
-            <button class="btn-floating" id="fsBtn" onclick="toggleFullscreen()">⛶ На весь экран</button>
+            <button class="btn-floating" id="pipBtn" onclick="togglePiP()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><rect x="11" y="9" width="9" height="6" rx="1"/></svg>
+                Плавающий режим
+            </button>
+            <button class="btn-floating" id="fsBtn" onclick="toggleFullscreen()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+                На весь экран
+            </button>
         </div>
         
         <div class="countdown-overlay" id="countdownOverlay">
@@ -241,6 +269,7 @@
         <video id="mainVideo" controls playsinline></video>
     </div>
 
+    <!-- Консоль логов (Видна ТОЛЬКО Овнеру) -->
     <div class="log-console-bar">
         <div class="log-header" onclick="toggleLogs()">
             <span>🐞 Живой Лог Ошибок <span id="logCount">(0)</span></span>
@@ -250,7 +279,7 @@
     </div>
 
     <script>
-        const VERSION = "5.5.0";
+        const VERSION = "6.0.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -294,7 +323,6 @@
         let currentPlaylist = [];
         let currentEpIndex = 0;
 
-        // === 🟣 ФИОЛЕТОВЫЕ КНОПКИ УПРАВЛЕНИЯ ЭКРАНОМ И ОКОШКОМ ===
         async function togglePiP() {
             try {
                 if (document.pictureInPictureElement) {
@@ -304,7 +332,7 @@
                 } else if (video.webkitSetPresentationMode) {
                     video.webkitSetPresentationMode(video.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture');
                 } else {
-                    alert('Режим Окошка (PiP) не поддерживается вашим браузером');
+                    alert('Режим Окошка (PiP) не поддерживается браузером');
                 }
             } catch (e) {
                 addLog('ERROR', 'Ошибка включения Окошка (PiP)', e.message);
@@ -319,7 +347,7 @@
                 } else if (container.webkitRequestFullscreen) {
                     container.webkitRequestFullscreen();
                 } else if (video.webkitEnterFullscreen) {
-                    video.webkitEnterFullscreen(); // iOS Safari fallback
+                    video.webkitEnterFullscreen();
                 }
             } else {
                 if (document.exitFullscreen) {
@@ -330,13 +358,12 @@
             }
         }
 
-        // === 👆 ДВОЙНОЙ ТАП (DOUBLE TAP) ПО ЩИТУ ГОСТЯ ДЛЯ ВОЗВРАТА / ПОЛНОГО ЭКРАНА ===
         let lastTapTime = 0;
         function handleDoubleTap(e) {
             const now = new Date().getTime();
             const timespan = now - lastTapTime;
             if (timespan < 300 && timespan > 0) {
-                toggleFullscreen(); // Двойной тап разворачивает / сворачивает во весь экран!
+                toggleFullscreen();
                 if (e.cancelable) e.preventDefault();
             }
             lastTapTime = now;
@@ -347,8 +374,9 @@
 
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
-            document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v5.5';
+            const badge = document.getElementById('serverBadge');
+            badge.className = 'badge badge-online';
+            badge.innerText = '💚 На связи'; // 💚 Зеленое сердечко вместо кругляшки!
         });
 
         socket.on('auth_result', (data) => {
@@ -359,6 +387,9 @@
                 document.getElementById('ownerPanel').style.display = 'block';
                 document.getElementById('roleBadge').className = 'badge badge-owner';
                 document.getElementById('roleBadge').innerText = 'Owner 👑';
+                
+                // Показываем логи ТОЛЬКО Овнеру
+                document.querySelector('.log-console-bar').style.display = 'block';
             }
         });
 
@@ -366,7 +397,7 @@
 
         socket.on('kinovibe_auth_result', (data) => {
             if (data.success) {
-                document.getElementById('kvStatus').style.display = 'block';
+                document.getElementById('kvAuthBox').style.display = 'none'; // Скрываем форму если залогинен
                 addLog('SUCCESS', 'Kinovibe HD Аккаунт подсоединен!');
             } else {
                 addLog('ERROR', 'Ошибка входа Kinovibe!', data.msg);
@@ -375,11 +406,13 @@
 
         socket.on('room_state', (state) => {
             addLog('INFO', 'Состояние комнаты:', state.mode);
+            
+            // Если аккаунт Kinovibe подключен — скрываем окно входа
             if (state.has_kv_cookies) {
-                document.getElementById('kvStatus').style.display = 'block';
+                document.getElementById('kvAuthBox').style.display = 'none';
             }
             if (state.playlist && state.playlist.length > 0) {
-                renderPlaylist(state.playlist, state.current_ep_index || 0);
+                renderPlaylist(state.playlist, state.current_ep_index || 0, state.media_title || "");
             }
             if (state.mode === 'iframe' && iframe.src !== state.current_url) {
                 iframe.src = state.current_url;
@@ -416,15 +449,14 @@
             iframe.style.display = 'none';
             video.style.display = 'block';
             
-            // Показываем фиолетовые кнопки плавающего управления
-            document.getElementById('pipBtn').style.display = 'inline-block';
-            document.getElementById('fsBtn').style.display = 'inline-block';
+            document.getElementById('pipBtn').style.display = 'inline-flex';
+            document.getElementById('fsBtn').style.display = 'inline-flex';
 
             video.pause();
             video.currentTime = 0;
             
             if (isOwner && autoStartBtn) {
-                document.getElementById('syncStartBtn').style.display = 'inline-block';
+                document.getElementById('syncStartBtn').style.display = 'inline-flex';
             }
             
             if (Hls.isSupported() && rawUrl.includes('.m3u8')) {
@@ -502,7 +534,7 @@
                 loadRawVideo(data.url, true);
             }
             if (data.action === 'update_playlist') {
-                renderPlaylist(data.playlist, data.currentIndex);
+                renderPlaylist(data.playlist, data.currentIndex, data.media_title || "");
             }
             
             if (isOwner) return;
@@ -545,20 +577,24 @@
         function loginGuest() {
             document.getElementById('authModal').style.display = 'none';
             document.getElementById('guestOverlay').style.display = 'block';
-            addLog('INFO', 'Вход зрителя. Плеер заблокирован.');
+            addLog('INFO', 'Вход зрителя.');
         }
 
-        function renderPlaylist(playlist, activeIndex = 0) {
+        // Отрисовка заглавного названия фильма/сериала
+        function renderPlaylist(playlist, activeIndex = 0, mediaTitle = "") {
             currentPlaylist = playlist;
             currentEpIndex = activeIndex;
             
             const panel = document.getElementById('seriesPanel');
             const grid = document.getElementById('seriesGrid');
-            const title = document.getElementById('currentEpTitle');
+            const titleEl = document.getElementById('mediaTitleText');
             
             panel.style.display = 'block';
             grid.innerHTML = '';
-            title.innerText = `🎬 Играет: ${playlist[activeIndex].title} (всего ${playlist.length})`;
+            
+            const activeEpName = playlist[activeIndex] ? playlist[activeIndex].title : "";
+            const displayTitle = mediaTitle ? `${mediaTitle} • ${activeEpName}` : activeEpName;
+            titleEl.innerText = displayTitle;
 
             playlist.forEach((ep, idx) => {
                 const btn = document.createElement('button');
@@ -594,7 +630,7 @@
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку!');
             document.getElementById('syncStartBtn').style.display = 'none';
-            addLog('INFO', 'Запуск Guest PiP v5.5...', url);
+            addLog('INFO', 'Запуск v6.0 Visual Polish...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
