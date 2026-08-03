@@ -6,7 +6,11 @@ import asyncio
 import socketio
 from aiohttp import web, ClientSession
 
-sio = socketio.AsyncServer(cors_allowed_origins='*')
+sio = socketio.AsyncServer(
+    cors_allowed_origins='*',
+    ping_timeout=30,
+    ping_interval=10
+)
 app = web.Application()
 sio.attach(app)
 
@@ -201,9 +205,21 @@ async def auth_owner(sid, data):
         room_state["owner_sid"] = sid
         print(f"[👑] Owner authenticated: {sid}")
         await sio.emit('auth_result', {'success': True}, to=sid)
+        
+        # ОБРАТНАЯ СИНХРОНИЗАЦИЯ: Овнер переподключился, просим Гостя сказать время!
+        if room_state["mode"] == "video" and room_state["connected_count"] > 1:
+            print("[🔄] Owner re-joined! Requesting time from Guests...")
+            await sio.emit('request_guest_time_for_owner', skip_sid=sid)
     else:
         print(f"[❌] Owner auth failed: '{pin}' vs '{OWNER_PIN}'")
         await sio.emit('auth_result', {'success': False}, to=sid)
+
+# Ответ от Гостя с временем для Овнера
+@sio.event
+async def guest_time_report(sid, data):
+    if room_state["owner_sid"]:
+        print(f"[🔄] Forwarding Guest time {data['time']}s to Owner {room_state['owner_sid']}")
+        await sio.emit('apply_owner_catchup', data, to=room_state["owner_sid"])
 
 @sio.event
 async def kinovibe_login(sid, data):
@@ -294,7 +310,7 @@ async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Instant Auth v6.1 сканирует...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'MediaBeacon v6.3 сканирует...', 'details': url}, to=sid)
 
     try:
         headers = {
