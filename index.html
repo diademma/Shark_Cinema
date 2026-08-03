@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v2.6</title>
+    <title>Shark Cinema 🦈 v2.7 Kinovibe Engine</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -93,7 +93,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=2.6.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=2.7.0"></script>
 </head>
 <body>
 
@@ -110,7 +110,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v2.6 Fixed</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v2.7 Engine</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -119,18 +119,19 @@
 
     <div class="owner-panel" id="ownerPanel">
         <div style="display: flex; gap: 10px; width: 100%; flex-wrap: wrap;">
-            <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка на страницу фильма (или прямой .m3u8)">
+            <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка Kinovibe (или прямой .mp4/.m3u8)">
         </div>
         <div class="controls-row">
             <button class="btn btn-owner" style="width: auto; padding: 0 15px;" onclick="loadIframe()">🌐 Открыть сайт</button>
-            <button class="btn btn-magic" style="width: auto; padding: 0 15px;" onclick="extractVideo()">🪄 Извлечь видео (Sync)</button>
+            <button class="btn btn-magic" style="width: auto; padding: 0 15px;" onclick="extractVideo()">🪄 Извлечь фильм (SyncPlay)</button>
         </div>
     </div>
 
     <div class="player-container">
         <div class="guest-overlay" id="guestOverlay"></div>
         <iframe id="mainIframe" src="https://kinovibe.cc/" allowfullscreen></iframe>
-        <video id="mainVideo" controls crossorigin playsinline></video>
+        <!-- Добавлен referrerpolicy="no-referrer" для обхода блокировок CDN -->
+        <video id="mainVideo" controls crossorigin="anonymous" referrerpolicy="no-referrer" playsinline></video>
     </div>
 
     <div class="log-console-bar">
@@ -142,7 +143,7 @@
     </div>
 
     <script>
-        const VERSION = "2.6.0";
+        const VERSION = "2.7.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -190,7 +191,7 @@
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v2.6';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v2.7';
         });
 
         socket.on('auth_result', (data) => {
@@ -226,7 +227,7 @@
         }
 
         function loadRawVideo(url) {
-            addLog('SUCCESS', 'Включаю плеер с видео:', url);
+            addLog('SUCCESS', 'Запуск SyncPlay плеера:', url);
             iframe.style.display = 'none';
             video.style.display = 'block';
             
@@ -236,17 +237,15 @@
                 hlsPlayer.loadSource(url);
                 hlsPlayer.attachMedia(video);
                 hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-                    video.play().catch(e => addLog('WARN', 'Кликни по плееру (автоплей блочит браузер)'));
+                    video.play().catch(e => addLog('WARN', 'Автоплей заблокирован', 'Нажми Play на видео один раз'));
                 });
             } else {
                 video.src = url;
-                video.play().catch(e => addLog('WARN', 'Кликни по плееру (автоплей блочит браузер)'));
+                video.play().catch(e => addLog('WARN', 'Автоплей заблокирован', 'Нажми Play на видео один раз'));
             }
         }
 
-        // === ИСПРАВЛЕННАЯ ЛОГИКА ===
         socket.on('player_command', (data) => {
-            // 1. СМЕНУ ИНТЕРФЕЙСА ОБРАБАТЫВАЮТ ВСЕ (И Овнер, и Зритель)
             if (data.action === 'load_iframe') {
                 iframe.src = data.url;
                 switchToIframe();
@@ -255,7 +254,6 @@
                 loadRawVideo(data.url);
             }
             
-            // 2. А ВОТ ЧУЖУЮ ПАУЗУ/ПЛЕЙ ОВНЕР ИГНОРИРУЕТ (ОН РУЛИТ САМ)
             if (isOwner) return; 
             
             if (data.action === 'play') {
@@ -274,7 +272,6 @@
             }
         });
 
-        // Отправка событий от Овнера
         video.addEventListener('play', () => {
             if (isOwner && !ignoreNextEvent) socket.emit('player_action', { action: 'play', time: video.currentTime });
             ignoreNextEvent = false;
@@ -308,8 +305,8 @@
 
         function extractVideo() {
             const url = document.getElementById('targetUrl').value.trim();
-            if (!url) return alert('Вставь ссылку на фильм!');
-            addLog('INFO', 'Запрос на парсинг...', url);
+            if (!url) return alert('Вставь ссылку Kinovibe!');
+            addLog('INFO', 'Запрос на умный парсинг Kinovibe...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
