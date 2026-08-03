@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v5.0 TrueSync</title>
+    <title>Shark Cinema 🦈 v5.1 TrueSync</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -103,10 +103,8 @@
         iframe { width: 100%; height: 100%; border: none; }
         video { width: 100%; height: 100%; background: #000; display: none; outline: none; }
         
-        /* Глухой щит для Гостей */
         .guest-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; background: transparent; }
 
-        /* Оверлей Синхронного Отсчета */
         .countdown-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(11, 7, 19, 0.85); backdrop-filter: blur(8px);
@@ -138,7 +136,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } .countdown-num { font-size: 100px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=5.0.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=5.1.0"></script>
 </head>
 <body>
 
@@ -155,7 +153,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v5.0 TrueSync</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v5.1 TrueSync Universal</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -164,18 +162,18 @@
 
     <div class="owner-panel" id="ownerPanel">
         <div style="display: flex; gap: 10px; width: 100%; flex-wrap: wrap;">
-            <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка Kinovibe (Сериал, Аниме или Фильм)">
+            <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка Kinovibe (Фильм, Сериал или Аниме)">
         </div>
         <div class="controls-row">
             <button class="btn btn-owner" style="width: auto; padding: 0 15px;" onclick="loadIframe()">🌐 Открыть сайт</button>
-            <button class="btn btn-magic" style="width: auto; padding: 0 15px;" onclick="extractVideo()">🚀 Извлечь серии</button>
+            <button class="btn btn-magic" style="width: auto; padding: 0 15px;" onclick="extractVideo()">🚀 Открыть в Плеере (SyncPlay)</button>
             <button class="btn btn-sync" id="syncStartBtn" style="width: auto; padding: 0 20px;" onclick="startSyncCountdown()">⏱ Синхронный Старт</button>
         </div>
     </div>
 
     <div class="series-panel" id="seriesPanel">
         <div class="series-header">
-            <span id="currentEpTitle">🎬 Найдено серий: 0</span>
+            <span id="currentEpTitle">🎬 Найдено: 0</span>
             <div style="display: flex; gap: 8px;">
                 <button class="btn-nav-ep" id="prevEpBtn" onclick="switchEpRelative(-1)">◀ Пред.</button>
                 <button class="btn-nav-ep" id="nextEpBtn" onclick="switchEpRelative(1)">След. ▶</button>
@@ -185,10 +183,8 @@
     </div>
 
     <div class="player-container">
-        <!-- Абсолютный глухой щит для гостя -->
         <div class="guest-overlay" id="guestOverlay"></div>
         
-        <!-- Оверлей отсчета 5 сек -->
         <div class="countdown-overlay" id="countdownOverlay">
             <div class="countdown-num" id="countdownNum">5</div>
             <div class="countdown-text">Подготовка синхронного потока...</div>
@@ -207,7 +203,7 @@
     </div>
 
     <script>
-        const VERSION = "5.0.0";
+        const VERSION = "5.1.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -253,7 +249,7 @@
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v5.0';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v5.1';
         });
 
         socket.on('auth_result', (data) => {
@@ -269,7 +265,6 @@
 
         socket.on('server_log', (data) => { addLog(data.type, data.msg, data.details); });
 
-        // === ИНИЦИАЛИЗАЦИЯ И ПОЗДНИЙ ВХОД ===
         socket.on('room_state', (state) => {
             addLog('INFO', 'Состояние комнаты:', state.mode);
             if (state.playlist && state.playlist.length > 0) {
@@ -279,11 +274,10 @@
                 iframe.src = state.current_url;
                 switchToIframe();
             } else if (state.mode === 'video' && state.current_url) {
-                loadRawVideo(state.current_url, false); // Загружаем на паузе
+                loadRawVideo(state.current_url, false);
                 
-                // Если я Зритель, прошу у Овнера точное время
                 if (!isOwner) {
-                    addLog('INFO', 'Запрос актуального таймлайна у Овнера...');
+                    addLog('INFO', 'Запрос таймлайна у Овнера...');
                     socket.emit('guest_ready_sync');
                 }
             }
@@ -297,9 +291,8 @@
             document.getElementById('syncStartBtn').style.display = 'none';
         }
 
-        // Загрузка видео теперь всегда на паузе
         function loadRawVideo(rawUrl, autoStartBtn = true) {
-            addLog('SUCCESS', 'Загрузка потока...', rawUrl);
+            addLog('SUCCESS', 'Запуск прямого потока:', rawUrl);
             iframe.style.display = 'none';
             video.style.display = 'block';
             video.pause();
@@ -319,10 +312,9 @@
             }
         }
 
-        // === СИСТЕМА LATE JOINER SYNC (Умный вход гостя) ===
+        // LATE JOINER SYNC
         socket.on('request_owner_time', (data) => {
             if (isOwner) {
-                // Сервер просит овнера сказать, где он сейчас
                 socket.emit('owner_time_response', {
                     guest_sid: data.guest_sid,
                     time: video.currentTime,
@@ -334,7 +326,6 @@
         socket.on('apply_sync_late', (data) => {
             if (!isOwner) {
                 ignoreNextEvent = true;
-                // Компенсация задержки интернета: +1 секунда, если видео идет
                 const targetTime = data.time + (data.paused ? 0 : 1.0);
                 video.currentTime = targetTime;
                 
@@ -343,11 +334,11 @@
                 } else {
                     video.pause();
                 }
-                addLog('SUCCESS', 'Синхронизация при входе завершена!', `Время: ${targetTime.toFixed(1)}с`);
+                addLog('SUCCESS', 'Синхронизация завершена!', `Время: ${targetTime.toFixed(1)}с`);
             }
         });
 
-        // === СИСТЕМА СИНХРОННОГО СТАРТА ===
+        // СИНХРОННЫЙ СТАРТ (ОТСЧЕТ 5 СЕК)
         function startSyncCountdown() {
             if (!isOwner) return;
             document.getElementById('syncStartBtn').style.display = 'none';
@@ -362,7 +353,6 @@
             let count = 5;
             num.innerText = count;
             
-            // Сбрасываем время в 0 перед стартом на всякий случай
             ignoreNextEvent = true;
             video.currentTime = 0;
             video.pause();
@@ -380,7 +370,6 @@
             }, 1000);
         });
 
-        // === ГЛОБАЛЬНЫЕ КОМАНДЫ УПРАВЛЕНИЯ ПЛЕЕРОМ ===
         socket.on('player_command', (data) => {
             if (data.action === 'load_iframe') {
                 iframe.src = data.url;
@@ -393,7 +382,7 @@
                 renderPlaylist(data.playlist, data.currentIndex);
             }
             
-            if (isOwner) return; // Овнер слушает только себя
+            if (isOwner) return;
             
             if (data.action === 'play') {
                 ignoreNextEvent = true;
@@ -403,9 +392,8 @@
             if (data.action === 'pause') {
                 ignoreNextEvent = true;
                 video.pause();
-                // ЖЕСТКАЯ ЗАМОРОЗКА (1 в 1)
                 video.currentTime = data.time;
-                addLog('INFO', 'Жесткая заморозка от Овнера', `Время: ${data.time}`);
+                addLog('INFO', 'Заморозка от Овнера', `Время: ${data.time}`);
             }
             if (data.action === 'seek') {
                 ignoreNextEvent = true;
@@ -413,7 +401,6 @@
             }
         });
 
-        // === ИСХОДЯЩИЕ СОБЫТИЯ ОТ ОВНЕРА ===
         video.addEventListener('play', () => {
             if (isOwner && !ignoreNextEvent) socket.emit('player_action', { action: 'play', time: video.currentTime });
             ignoreNextEvent = false;
@@ -427,7 +414,6 @@
             ignoreNextEvent = false;
         });
 
-        // === ОСТАЛЬНАЯ ЛОГИКА (АВТОРИЗАЦИЯ, ИЗВЛЕЧЕНИЕ) ===
         function loginOwner() {
             const pin = document.getElementById('pinInput').value.trim();
             socket.emit('auth_owner', { pin: pin });
@@ -435,9 +421,8 @@
 
         function loginGuest() {
             document.getElementById('authModal').style.display = 'none';
-            // Включаем 100% глухой щит на плеер для Гостя!
             document.getElementById('guestOverlay').style.display = 'block';
-            addLog('INFO', 'Вход зрителя. Интерфейс плеера заблокирован.');
+            addLog('INFO', 'Вход зрителя. Плеер заблокирован.');
         }
 
         function renderPlaylist(playlist, activeIndex = 0) {
@@ -450,7 +435,7 @@
             
             panel.style.display = 'block';
             grid.innerHTML = '';
-            title.innerText = `🎬 Играет: ${playlist[activeIndex].title} (из ${playlist.length})`;
+            title.innerText = `🎬 Играет: ${playlist[activeIndex].title} (всего ${playlist.length})`;
 
             playlist.forEach((ep, idx) => {
                 const btn = document.createElement('button');
@@ -484,9 +469,9 @@
 
         function extractVideo() {
             const url = document.getElementById('targetUrl').value.trim();
-            if (!url) return alert('Вставь ссылку на страницу!');
+            if (!url) return alert('Вставь ссылку!');
             document.getElementById('syncStartBtn').style.display = 'none';
-            addLog('INFO', 'Запуск TrueSync v5.0...', url);
+            addLog('INFO', 'Запуск Universal TrueSync v5.1...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
