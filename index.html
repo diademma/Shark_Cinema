@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v4.1 Direct CDN</title>
+    <title>Shark Cinema 🦈 v4.2 Universal</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -121,7 +121,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=4.1.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=4.2.0"></script>
 </head>
 <body>
 
@@ -138,7 +138,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v4.1 Direct CDN</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v4.2 Universal</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -147,7 +147,7 @@
 
     <div class="owner-panel" id="ownerPanel">
         <div style="display: flex; gap: 10px; width: 100%; flex-wrap: wrap;">
-            <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка Kinovibe (например: kinovibe.cc/25357-protivostoyanie...)">
+            <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка Kinovibe (Сериал, Аниме или Фильм)">
         </div>
         <div class="controls-row">
             <button class="btn btn-owner" style="width: auto; padding: 0 15px;" onclick="loadIframe()">🌐 Открыть сайт</button>
@@ -181,7 +181,7 @@
     </div>
 
     <script>
-        const VERSION = "4.1.0";
+        const VERSION = "4.2.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -231,7 +231,7 @@
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v4.1';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v4.2';
         });
 
         socket.on('auth_result', (data) => {
@@ -269,7 +269,6 @@
             video.pause();
         }
 
-        // 🔥 ПРЯМАЯ ЗАГРУЗКА ВИДЕО ИЗ СКОРОСТНОГО CDN (Без Прокси)
         function loadRawVideo(rawUrl) {
             addLog('SUCCESS', 'Запуск прямого CDN потока:', rawUrl);
             
@@ -285,7 +284,7 @@
                     video.play().catch(e => addLog('WARN', 'Кликни по экрану для воспроизведения'));
                 });
             } else {
-                video.src = rawUrl; // Прямая ссылка svd11.kvb.cool!
+                video.src = rawUrl;
                 video.play().catch(e => addLog('WARN', 'Кликни по экрану для воспроизведения'));
             }
         }
@@ -389,7 +388,7 @@
         function extractVideo() {
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку на страницу!');
-            addLog('INFO', 'Запуск Direct CDN v4.1...', url);
+            addLog('INFO', 'Запуск Universal Engine v4.2...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
