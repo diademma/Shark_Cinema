@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v4.0 Playerjs Engine</title>
+    <title>Shark Cinema 🦈 v4.1 Direct CDN</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -121,7 +121,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=4.0.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=4.1.0"></script>
 </head>
 <body>
 
@@ -138,7 +138,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v4.0 Playerjs Engine</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v4.1 Direct CDN</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -181,7 +181,7 @@
     </div>
 
     <script>
-        const VERSION = "4.0.0";
+        const VERSION = "4.1.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -231,7 +231,7 @@
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v4.0';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v4.1';
         });
 
         socket.on('auth_result', (data) => {
@@ -269,9 +269,9 @@
             video.pause();
         }
 
+        // 🔥 ПРЯМАЯ ЗАГРУЗКА ВИДЕО ИЗ СКОРОСТНОГО CDN (Без Прокси)
         function loadRawVideo(rawUrl) {
-            const proxiedUrl = `${SERVER_URL}/proxy_video?url=${encodeURIComponent(rawUrl)}`;
-            addLog('SUCCESS', 'Запуск серии через VPS:', proxiedUrl);
+            addLog('SUCCESS', 'Запуск прямого CDN потока:', rawUrl);
             
             iframe.style.display = 'none';
             video.style.display = 'block';
@@ -279,13 +279,13 @@
             if (Hls.isSupported() && rawUrl.includes('.m3u8')) {
                 if (hlsPlayer) hlsPlayer.destroy();
                 hlsPlayer = new Hls();
-                hlsPlayer.loadSource(proxiedUrl);
+                hlsPlayer.loadSource(rawUrl);
                 hlsPlayer.attachMedia(video);
                 hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
                     video.play().catch(e => addLog('WARN', 'Кликни по экрану для воспроизведения'));
                 });
             } else {
-                video.src = proxiedUrl;
+                video.src = rawUrl; // Прямая ссылка svd11.kvb.cool!
                 video.play().catch(e => addLog('WARN', 'Кликни по экрану для воспроизведения'));
             }
         }
@@ -389,7 +389,7 @@
         function extractVideo() {
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку на страницу!');
-            addLog('INFO', 'Запуск Playerjs Engine v4.0...', url);
+            addLog('INFO', 'Запуск Direct CDN v4.1...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
