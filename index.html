@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v5.4 BOM-Proof</title>
+    <title>Shark Cinema 🦈 v5.5 Guest PiP</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -103,7 +103,37 @@
         iframe { width: 100%; height: 100%; border: none; }
         video { width: 100%; height: 100%; background: #000; display: none; outline: none; }
         
+        /* 🛡 Глухой защитный щит от кликов гостя (z-index 100) */
         .guest-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; background: transparent; }
+
+        /* 🟣 Фиолетовые плавающие кнопки поверх щита (z-index 300) */
+        .floating-player-controls {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            z-index: 300;
+            display: flex;
+            gap: 8px;
+        }
+        .btn-floating {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.85), rgba(157, 78, 221, 0.85));
+            color: white;
+            border: 1px solid rgba(199, 125, 255, 0.4);
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            transition: all 0.2s ease;
+            display: none; /* Видимы когда включен видеоплеер */
+        }
+        .btn-floating:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(157, 78, 221, 0.6);
+            background: linear-gradient(135deg, #7b2cbf, #9d4edd);
+        }
 
         .countdown-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -136,7 +166,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } .countdown-num { font-size: 100px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=5.4.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=5.5.0"></script>
 </head>
 <body>
 
@@ -153,7 +183,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v5.4 BOM-Proof</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v5.5 Guest PiP</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -193,7 +223,14 @@
     </div>
 
     <div class="player-container">
+        <!-- 🛡 Глухой защитный щит для Гостя -->
         <div class="guest-overlay" id="guestOverlay"></div>
+
+        <!-- 🟣 Плавающие фиолетовые кнопки для Зрителя/Овнера -->
+        <div class="floating-player-controls">
+            <button class="btn-floating" id="pipBtn" onclick="togglePiP()">🖼️ Окошко (PiP)</button>
+            <button class="btn-floating" id="fsBtn" onclick="toggleFullscreen()">⛶ На весь экран</button>
+        </div>
         
         <div class="countdown-overlay" id="countdownOverlay">
             <div class="countdown-num" id="countdownNum">5</div>
@@ -213,7 +250,7 @@
     </div>
 
     <script>
-        const VERSION = "5.4.0";
+        const VERSION = "5.5.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -250,16 +287,68 @@
 
         const iframe = document.getElementById('mainIframe');
         const video = document.getElementById('mainVideo');
+        const guestOverlay = document.getElementById('guestOverlay');
         let isOwner = false;
         let hlsPlayer = null;
         let ignoreNextEvent = false;
         let currentPlaylist = [];
         let currentEpIndex = 0;
 
+        // === 🟣 ФИОЛЕТОВЫЕ КНОПКИ УПРАВЛЕНИЯ ЭКРАНОМ И ОКОШКОМ ===
+        async function togglePiP() {
+            try {
+                if (document.pictureInPictureElement) {
+                    await document.exitPictureInPicture();
+                } else if (video.requestPictureInPicture) {
+                    await video.requestPictureInPicture();
+                } else if (video.webkitSetPresentationMode) {
+                    video.webkitSetPresentationMode(video.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture');
+                } else {
+                    alert('Режим Окошка (PiP) не поддерживается вашим браузером');
+                }
+            } catch (e) {
+                addLog('ERROR', 'Ошибка включения Окошка (PiP)', e.message);
+            }
+        }
+
+        function toggleFullscreen() {
+            const container = document.querySelector('.player-container');
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (container.requestFullscreen) {
+                    container.requestFullscreen();
+                } else if (container.webkitRequestFullscreen) {
+                    container.webkitRequestFullscreen();
+                } else if (video.webkitEnterFullscreen) {
+                    video.webkitEnterFullscreen(); // iOS Safari fallback
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        }
+
+        // === 👆 ДВОЙНОЙ ТАП (DOUBLE TAP) ПО ЩИТУ ГОСТЯ ДЛЯ ВОЗВРАТА / ПОЛНОГО ЭКРАНА ===
+        let lastTapTime = 0;
+        function handleDoubleTap(e) {
+            const now = new Date().getTime();
+            const timespan = now - lastTapTime;
+            if (timespan < 300 && timespan > 0) {
+                toggleFullscreen(); // Двойной тап разворачивает / сворачивает во весь экран!
+                if (e.cancelable) e.preventDefault();
+            }
+            lastTapTime = now;
+        }
+
+        guestOverlay.addEventListener('touchend', handleDoubleTap);
+        guestOverlay.addEventListener('dblclick', toggleFullscreen);
+
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v5.4';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v5.5';
         });
 
         socket.on('auth_result', (data) => {
@@ -315,6 +404,8 @@
         function switchToIframe() {
             video.style.display = 'none';
             iframe.style.display = 'block';
+            document.getElementById('pipBtn').style.display = 'none';
+            document.getElementById('fsBtn').style.display = 'none';
             if (hlsPlayer) hlsPlayer.destroy();
             video.pause();
             document.getElementById('syncStartBtn').style.display = 'none';
@@ -324,6 +415,11 @@
             addLog('SUCCESS', 'Запуск прямого потока:', rawUrl);
             iframe.style.display = 'none';
             video.style.display = 'block';
+            
+            // Показываем фиолетовые кнопки плавающего управления
+            document.getElementById('pipBtn').style.display = 'inline-block';
+            document.getElementById('fsBtn').style.display = 'inline-block';
+
             video.pause();
             video.currentTime = 0;
             
@@ -498,7 +594,7 @@
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку!');
             document.getElementById('syncStartBtn').style.display = 'none';
-            addLog('INFO', 'Запуск BOM-Proof v5.4...', url);
+            addLog('INFO', 'Запуск Guest PiP v5.5...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
