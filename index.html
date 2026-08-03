@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v5.1 TrueSync</title>
+    <title>Shark Cinema 🦈 v5.3 Auto-HD</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -63,7 +63,7 @@
         .url-input { 
             flex: 1; padding: 12px 16px; border-radius: 12px; 
             border: 1px solid #3d2b63; background: #0f0a1c; color: white; 
-            font-size: 14px; outline: none; min-width: 250px;
+            font-size: 14px; outline: none; min-width: 200px;
         }
 
         .series-panel {
@@ -136,7 +136,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } .countdown-num { font-size: 100px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=5.1.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=5.3.0"></script>
 </head>
 <body>
 
@@ -153,7 +153,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v5.1 TrueSync Universal</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v5.3 Auto-HD</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -168,6 +168,17 @@
             <button class="btn btn-owner" style="width: auto; padding: 0 15px;" onclick="loadIframe()">🌐 Открыть сайт</button>
             <button class="btn btn-magic" style="width: auto; padding: 0 15px;" onclick="extractVideo()">🚀 Открыть в Плеере (SyncPlay)</button>
             <button class="btn btn-sync" id="syncStartBtn" style="width: auto; padding: 0 20px;" onclick="startSyncCountdown()">⏱ Синхронный Старт</button>
+        </div>
+
+        <!-- Поле авторизации Kinovibe для 720p/1080p HD -->
+        <div style="margin-top: 15px; border-top: 1px solid #332252; padding-top: 10px;">
+            <small style="color: #9d8ec4; display: block; margin-bottom: 5px;">🔑 Аккаунт Kinovibe (для разблокировки 720p/1080p HD):</small>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="text" id="kvLogin" class="url-input" placeholder="Логин Kinovibe">
+                <input type="password" id="kvPass" class="url-input" placeholder="Пароль Kinovibe">
+                <button class="btn btn-owner" style="width: auto; padding: 0 15px; margin-bottom:0;" onclick="connectKinovibeHD()">🔑 Подключить HD</button>
+            </div>
+            <span id="kvStatus" style="font-size: 11px; color: #2ed573; display: none; margin-top: 5px; font-weight: bold;">🟢 HD Аккаунт подключен! Все фильмы загружаются в 720p/1080p!</span>
         </div>
     </div>
 
@@ -203,7 +214,7 @@
     </div>
 
     <script>
-        const VERSION = "5.1.0";
+        const VERSION = "5.3.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -249,7 +260,7 @@
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v5.1';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v5.3';
         });
 
         socket.on('auth_result', (data) => {
@@ -265,8 +276,20 @@
 
         socket.on('server_log', (data) => { addLog(data.type, data.msg, data.details); });
 
+        socket.on('kinovibe_auth_result', (data) => {
+            if (data.success) {
+                document.getElementById('kvStatus').style.display = 'block';
+                addLog('SUCCESS', 'Kinovibe HD Аккаунт подсоединен!');
+            } else {
+                addLog('ERROR', 'Ошибка входа Kinovibe!', data.msg);
+            }
+        });
+
         socket.on('room_state', (state) => {
             addLog('INFO', 'Состояние комнаты:', state.mode);
+            if (state.has_kv_cookies) {
+                document.getElementById('kvStatus').style.display = 'block';
+            }
             if (state.playlist && state.playlist.length > 0) {
                 renderPlaylist(state.playlist, state.current_ep_index || 0);
             }
@@ -275,13 +298,20 @@
                 switchToIframe();
             } else if (state.mode === 'video' && state.current_url) {
                 loadRawVideo(state.current_url, false);
-                
                 if (!isOwner) {
-                    addLog('INFO', 'Запрос таймлайна у Овнера...');
+                    addLog('INFO', 'Синхронизация времени с Овнером...');
                     socket.emit('guest_ready_sync');
                 }
             }
         });
+
+        function connectKinovibeHD() {
+            const login = document.getElementById('kvLogin').value.trim();
+            const password = document.getElementById('kvPass').value.trim();
+            if (!login || !password) return alert('Введи логин и пароль Kinovibe!');
+            addLog('INFO', 'Отправка данных авторизации Kinovibe на сервер...');
+            socket.emit('kinovibe_login', { login: login, password: password });
+        }
 
         function switchToIframe() {
             video.style.display = 'none';
@@ -312,7 +342,6 @@
             }
         }
 
-        // LATE JOINER SYNC
         socket.on('request_owner_time', (data) => {
             if (isOwner) {
                 socket.emit('owner_time_response', {
@@ -338,7 +367,6 @@
             }
         });
 
-        // СИНХРОННЫЙ СТАРТ (ОТСЧЕТ 5 СЕК)
         function startSyncCountdown() {
             if (!isOwner) return;
             document.getElementById('syncStartBtn').style.display = 'none';
@@ -471,7 +499,7 @@
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку!');
             document.getElementById('syncStartBtn').style.display = 'none';
-            addLog('INFO', 'Запуск Universal TrueSync v5.1...', url);
+            addLog('INFO', 'Запуск Auto-HD v5.3...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
