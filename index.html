@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v2.1</title>
+    <title>Shark Cinema 🦈 v2.2</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -60,7 +60,7 @@
 
         @media (max-width: 600px) { .catalog-container { height: 400px; } }
     </style>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=2.1.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=2.2.0"></script>
 </head>
 <body>
 
@@ -75,7 +75,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v2.1</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v2.2</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Режим: Зритель</span>
@@ -86,7 +86,7 @@
     <div class="view-mode" id="catalogMode">
         <div class="catalog-container">
             <div class="guest-overlay" id="guestOverlay"></div>
-            <iframe id="proxyIframe" src="https://agile-enrich-grumpily.ngrok-free.dev/proxy?url=https://kinovibe.cc/"></iframe>
+            <iframe id="proxyIframe"></iframe>
         </div>
     </div>
 
@@ -105,7 +105,7 @@
     </div>
 
     <script>
-        const VERSION = "2.1.0";
+        const VERSION = "2.2.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         
         const socket = io(SERVER_URL, {
@@ -117,16 +117,36 @@
         const catalogMode = document.getElementById('catalogMode');
         const cinemaMode = document.getElementById('cinemaMode');
         const cinemaPlayer = document.getElementById('cinemaPlayer');
+        const proxyIframe = document.getElementById('proxyIframe');
         const countdownOverlay = document.getElementById('countdownOverlay');
         const countdownNum = document.getElementById('countdownNum');
         
         let isOwner = false;
         let ignoreNextSync = false;
 
+        // Загрузка Киновайба БЕЗ ЗАГЛУШЕК NGROK через fetch с заголовком
+        async function loadProxiedPage(url) {
+            try {
+                const proxyUrl = SERVER_URL + "/proxy?url=" + encodeURIComponent(url);
+                const res = await fetch(proxyUrl, {
+                    headers: {
+                        "ngrok-skip-browser-warning": "true"
+                    }
+                });
+                const html = await res.text();
+                proxyIframe.srcdoc = html;
+            } catch (err) {
+                console.error("Ошибка проксирования:", err);
+            }
+        }
+
+        // Автоматом загружаем главную Киновайба сразу при открытии
+        loadProxiedPage("https://kinovibe.cc/");
+
         socket.on('connect', () => {
             const serverBadge = document.getElementById('serverBadge');
             serverBadge.className = 'badge badge-online';
-            serverBadge.innerText = '🟢 На связи (v2.1)';
+            serverBadge.innerText = '🟢 На связи (v2.2)';
         });
 
         socket.on('disconnect', () => {
@@ -150,7 +170,6 @@
             }
         });
 
-        // ДЕТЕКТОР КЛИКОВ: Перехватываем видео из прокси-Iframe
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'VIDEO_DETECTED') {
                 console.log("[🎯 ДЕТЕКТОР] Видео подхвачено:", event.data.url);
@@ -165,7 +184,6 @@
             cinemaMode.style.display = 'block';
             cinemaPlayer.src = data.url;
             
-            // Обратный отсчет 5 секунд для гарантии загрузки у обоих
             countdownOverlay.style.display = 'flex';
             let count = 5;
             countdownNum.innerText = count;
