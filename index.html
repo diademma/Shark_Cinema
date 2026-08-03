@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v5.3 Auto-HD</title>
+    <title>Shark Cinema 🦈 v5.4 BOM-Proof</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -136,7 +136,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } .countdown-num { font-size: 100px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=5.3.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=5.4.0"></script>
 </head>
 <body>
 
@@ -153,7 +153,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v5.3 Auto-HD</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v5.4 BOM-Proof</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -170,7 +170,6 @@
             <button class="btn btn-sync" id="syncStartBtn" style="width: auto; padding: 0 20px;" onclick="startSyncCountdown()">⏱ Синхронный Старт</button>
         </div>
 
-        <!-- Поле авторизации Kinovibe для 720p/1080p HD -->
         <div style="margin-top: 15px; border-top: 1px solid #332252; padding-top: 10px;">
             <small style="color: #9d8ec4; display: block; margin-bottom: 5px;">🔑 Аккаунт Kinovibe (для разблокировки 720p/1080p HD):</small>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -214,7 +213,7 @@
     </div>
 
     <script>
-        const VERSION = "5.3.0";
+        const VERSION = "5.4.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -260,7 +259,7 @@
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v5.3';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v5.4';
         });
 
         socket.on('auth_result', (data) => {
@@ -499,7 +498,7 @@
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку!');
             document.getElementById('syncStartBtn').style.display = 'none';
-            addLog('INFO', 'Запуск Auto-HD v5.3...', url);
+            addLog('INFO', 'Запуск BOM-Proof v5.4...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
