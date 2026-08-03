@@ -20,7 +20,6 @@ room_state = {
     "connected_count": 0
 }
 
-# --- ВИДЕО ТУННЕЛЬ С ПОДДЕРЖКОЙ DLE РЕДИРЕКТОВ ---
 async def proxy_video(request):
     target_url = request.query.get("url")
     if not target_url: return web.Response(status=400, text="Missing url")
@@ -36,7 +35,6 @@ async def proxy_video(request):
 
     try:
         async with ClientSession() as session:
-            # allow_redirects=True следует по редиректам DLE download.php -> s15.kvb.cool
             async with session.get(target_url, headers=headers, allow_redirects=True) as resp:
                 proxy_resp = web.StreamResponse(
                     status=resp.status,
@@ -61,78 +59,82 @@ async def proxy_video(request):
 
 app.router.add_get('/proxy_video', proxy_video)
 
-# --- ВСЕЯДНЫЙ СБОРЩИК (ПАРСИТ DLE ССЫЛКИ, [480], [720], KVB.COOL, MP4) ---
-def parse_omnivorous_playlist(html, base_url="https://kinovibe.cc"):
-    episodes_map = {} # ep_num -> { title, url, priority }
+# --- ПРОВЕРКА ДЕЙСТВИТЕЛЬНОСТИ МЕДИАССЫЛКИ ---
+def is_valid_media_link(href, label=""):
+    href_lower = href.lower()
     
-    # 1. Захватываем строки вида: "1 Серия [AniMaunt] <a href="...">[480]</a>"
-    # Находит номер серии, текстовую плашку (озвучку) и ссылки скачивания DLE
-    rows = re.findall(
-        r'(\d+)\s*Серия\s*(\[[^\]]+\])?.*?(<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>)', 
-        html, re.IGNORECASE | re.DOTALL
-    )
-
-    for ep_num_str, voiceover, a_tag, href, label in rows:
-        ep_num = int(ep_num_str)
-        href_clean = href.strip()
+    # Игнорируем категории, теги, года и трейлеры
+    if any(bad in href_lower for bad in ['/trailer/', 'trailer', 'yearanime', '/anime/', '/serial/', '/film/', 'category', 'tags']):
+        if not ('download.php' in href_lower or 'kvb.cool' in href_lower or '.mp4' in href_lower or '.m3u8' in href_lower):
+            return False
+            
+    if 'download.php' in href_lower or 'engine/download' in href_lower or 'kvb.cool' in href_lower or '.mp4' in href_lower or '.m3u8' in href_lower:
+        return True
         
-        if href_clean.startswith('//'): href_clean = 'https:' + href_clean
-        elif href_clean.startswith('/'): href_clean = base_url.rstrip('/') + href_clean
-
-        voice = voiceover.strip() if voiceover else ""
-        title = f"{ep_num} Серия {voice}".strip()
-
-        # Приоритет отдаем ссылкам 720, но если их нет - отлично берется 480
-        priority = 2 if '720' in a_tag or '720' in label else 1
+    if '[480]' in label or '[720]' in label or '[1080]' in label:
+        return True
         
-        if ep_num not in episodes_map or priority > episodes_map[ep_num]['priority']:
-            episodes_map[ep_num] = {
-                "title": title,
-                "url": href_clean,
-                "priority": priority
-            }
+    return False
+
+# --- СТРОГИЙ ПАРСЕР СЕРИЙ ---
+def parse_omnivorous_playlist(html, base_url="https://kinovibe.cc"):
+    playlist = []
+    
+    # Находим все вхождения "X Серия"
+    matches = list(re.finditer(r'(\d+)\s*Серия\s*(\[[^\]]+\])?', html, re.IGNORECASE))
+    episodes_map = {}
+
+    for m in matches:
+        ep_num = int(m.group(1))
+        voice = m.group(2).strip() if m.group(2) else ""
+        
+        # Сканируем 600 символов ПОСЛЕ надписи "X Серия" в поисках тега <a>
+        start_pos = m.end()
+        snippet = html[start_pos:start_pos+600]
+        
+        a_tags = re.findall(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', snippet, re.IGNORECASE | re.DOTALL)
+        
+        for href, label in a_tags:
+            href_clean = href.strip()
+            if href_clean.startswith('//'): href_clean = 'https:' + href_clean
+            elif href_clean.startswith('/'): href_clean = base_url.rstrip('/') + href_clean
+            
+            if is_valid_media_link(href_clean, label):
+                title = f"{ep_num} Серия {voice}".strip()
+                priority = 2 if '720' in label or '720' in href_clean else 1
+                
+                if ep_num not in episodes_map or priority > episodes_map[ep_num]['priority']:
+                    episodes_map[ep_num] = {
+                        "title": title,
+                        "url": href_clean,
+                        "priority": priority
+                    }
+                break
 
     if episodes_map:
-        playlist = []
-        for num in sorted(episodes_map.keys()):
+        for ep_num in sorted(episodes_map.keys()):
             playlist.append({
-                "title": episodes_map[num]["title"],
-                "url": episodes_map[num]["url"]
+                "title": episodes_map[ep_num]["title"],
+                "url": episodes_map[ep_num]["url"]
             })
         return playlist
 
-    # 2. ФОЛБЭК: Если строки с "Серия" не выделились, собираем ВСЕ прямые видеоссылки
-    raw_a = re.findall(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html, re.IGNORECASE)
-    fallback_playlist = []
+    # Резервный поиск по всем валидным ссылкам на странице
+    all_a = re.findall(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html, re.IGNORECASE | re.DOTALL)
     seen_urls = set()
-
-    for href, label in raw_a:
+    for href, label in all_a:
         href_clean = href.strip()
         if href_clean.startswith('//'): href_clean = 'https:' + href_clean
         elif href_clean.startswith('/'): href_clean = base_url.rstrip('/') + href_clean
-
-        is_media = (
-            '.mp4' in href_clean or 
-            '.m3u8' in href_clean or 
-            'kvb.cool' in href_clean or 
-            'download.php' in href_clean or 
-            'engine/download' in href_clean or
-            '[480]' in label or '[720]' in label
-        )
-
-        if is_media and href_clean not in seen_urls and '/trailer/' not in href_clean and 'trailer' not in href_clean.lower():
+        
+        if is_valid_media_link(href_clean, label) and href_clean not in seen_urls:
             seen_urls.add(href_clean)
-            
-            # Попытка вытащить номер серии из URL
-            m_ep = re.search(r'(?:s\d+e|ep|series|seriya|[/_])(\d+)(?:[_\.]|$)', href_clean, re.IGNORECASE)
-            ep_idx = int(m_ep.group(1)) if m_ep else len(fallback_playlist) + 1
-            
-            fallback_playlist.append({
-                "title": f"{ep_idx} Серия",
+            playlist.append({
+                "title": f"Серия {len(playlist)+1}",
                 "url": href_clean
             })
 
-    return fallback_playlist
+    return playlist
 
 @sio.event
 async def connect(sid, environ):
@@ -190,7 +192,7 @@ async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Всеядный сканер v3.2 в работе...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Строгий сканер v3.3 в работе...', 'details': url}, to=sid)
 
     try:
         headers = {
