@@ -1,5 +1,5 @@
 import os
-import asyncio
+import requests
 import socketio
 from aiohttp import web
 
@@ -11,60 +11,77 @@ OWNER_PIN = os.getenv("OWNER_PIN", "18349276")
 
 room_state = {
     "owner_sid": None,
-    "current_url": "https://kinovibe.cc/",
-    "scroll_y": 0,
-    "connected_count": 0
+    "cinema_mode": False,
+    "current_video_url": None,
+    "is_playing": False,
+    "current_time": 0
 }
 
-sleep_timer_task = None
+async def proxy_handler(request):
+    target_url = request.query.get("url", "https://kinovibe.cc/")
+    if not target_url.startswith("http"):
+        target_url = "https://kinovibe.cc/" + target_url.lstrip("/")
 
-async def auto_sleep_timer():
-    """Таймер: через 30 минут отсутствия людей очищает память комнаты"""
-    print("[⏳] Все ушли с сайта. Запущен 30-минутный таймер сна...")
-    await asyncio.sleep(1800) # 1800 секунд = 30 минут
-    
-    # Если за 30 минут никто не вернулся
-    room_state["current_url"] = "https://kinovibe.cc/"
-    room_state["scroll_y"] = 0
-    room_state["owner_sid"] = None
-    print("[💤] 30 минут прошло! Память комнаты очищена, сервер перешел в режим глубокого сна.")
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Referer': 'https://kinovibe.cc/'
+        }
+        res = requests.get(target_url, headers=headers, timeout=10)
+        html = res.text
+
+        # Внедряем микро-скрипт перехвата видео-тега
+        detector_script = """
+        <script>
+        (function() {
+            function checkAndSend(video) {
+                var src = video.currentSrc || video.src;
+                if (src && src.indexOf('blob:') !== 0) {
+                    window.parent.postMessage({ type: 'VIDEO_DETECTED', url: src }, '*');
+                }
+            }
+            document.addEventListener('play', function(e) {
+                if (e.target && e.target.tagName === 'VIDEO') checkAndSend(e.target);
+            }, true);
+            document.addEventListener('loadstart', function(e) {
+                if (e.target && e.target.tagName === 'VIDEO') checkAndSend(e.target);
+            }, true);
+        })();
+        </script>
+        """
+        if "</body>" in html:
+            html = html.replace("</body>", detector_script + "</body>")
+        else:
+            html += detector_script
+
+        return web.Response(text=html, content_type='text/html', charset='utf-8')
+    except Exception as e:
+        return web.Response(text=f"Proxy Error: {e}", content_type='text/html', status=500)
+
+app.router.add_get('/proxy', proxy_handler)
 
 @sio.event
 async def connect(sid, environ):
-    global sleep_timer_task
-    room_state["connected_count"] += 1
-    print(f"[+] Подключился пользователь ({sid}). Всего людей: {room_state['connected_count']}")
-    
-    # Если кто-то зашел — отменяем таймер сна!
-    if sleep_timer_task and not sleep_timer_task.done():
-        sleep_timer_task.cancel()
-        print("[☀️] Кто-то зашел на сайт! Таймер сна отменен.")
-
+    print(f"[+] Client connected: {sid}")
     await sio.emit('room_state', room_state, to=sid)
 
 @sio.event
 async def disconnect(sid):
-    global sleep_timer_task
-    room_state["connected_count"] = max(0, room_state["connected_count"] - 1)
-    print(f"[-] Пользователь вышел ({sid}). Осталось людей: {room_state['connected_count']}")
-
+    print(f"[-] Client disconnected: {sid}")
     if room_state["owner_sid"] == sid:
         room_state["owner_sid"] = None
-        print("[!] Овнер вышел из комнаты!")
-
-    # Если на сайте осталось 0 человек — запускаем 30-минутный таймер сна
-    if room_state["connected_count"] == 0:
-        sleep_timer_task = asyncio.create_task(auto_sleep_timer())
+        print("[!] Owner disconnected!")
 
 @sio.event
 async def auth_owner(sid, data):
     pin = str(data.get("pin", "")).strip()
     if pin == OWNER_PIN:
         room_state["owner_sid"] = sid
-        print(f"[👑] ОВНЕР АВТОРИЗОВАН: {sid}")
+        print(f"[OK] OWNER AUTHENTICATED! ID: {sid}")
         await sio.emit('auth_result', {'success': True}, to=sid)
     else:
-        await sio.emit('auth_result', {'success': False, 'message': 'Неверный ПИН!'}, to=sid)
+        print(f"[FAIL] Incorrect PIN: '{pin}'")
+        await sio.emit('auth_result', {'success': False, 'message': 'Incorrect PIN'}, to=sid)
 
 @sio.event
 async def sync_action(sid, data):
@@ -72,16 +89,36 @@ async def sync_action(sid, data):
         return
 
     action = data.get("action")
-    if action == "load":
+
+    if action == "cinema_load":
         url = data.get("url")
-        room_state["current_url"] = url
-        room_state["scroll_y"] = 0
-        await sio.emit('sync_event', {'action': 'load', 'url': url}, skip_sid=sid)
-    elif action == "scroll":
-        scroll_y = data.get("y", 0)
-        room_state["scroll_y"] = scroll_y
-        await sio.emit('sync_event', {'action': 'scroll', 'y': scroll_y}, skip_sid=sid)
+        room_state["cinema_mode"] = True
+        room_state["current_video_url"] = url
+        room_state["current_time"] = 0
+        room_state["is_playing"] = True
+        print(f"[🎬] START CINEMA MODE: {url}")
+        await sio.emit('cinema_start', {'url': url})
+
+    elif action == "exit_cinema":
+        room_state["cinema_mode"] = False
+        room_state["current_video_url"] = None
+        print("[🚪] EXIT CINEMA MODE")
+        await sio.emit('cinema_exit', {})
+
+    elif action == "play":
+        room_state["is_playing"] = True
+        room_state["current_time"] = data.get("time", 0)
+        await sio.emit('sync_event', {'action': 'play', 'time': room_state["current_time"]}, skip_sid=sid)
+
+    elif action == "pause":
+        room_state["is_playing"] = False
+        room_state["current_time"] = data.get("time", 0)
+        await sio.emit('sync_event', {'action': 'pause', 'time': room_state["current_time"]}, skip_sid=sid)
+
+    elif action == "seek":
+        room_state["current_time"] = data.get("time", 0)
+        await sio.emit('sync_event', {'action': 'seek', 'time': room_state["current_time"]}, skip_sid=sid)
 
 if __name__ == '__main__':
-    print(f"[READY] Сервер с 30-минутным таймером сна запущен! Активный ПИН: {OWNER_PIN}")
+    print(f"[READY] Server v2.1 running! PIN: {OWNER_PIN}")
     web.run_app(app, host='0.0.0.0', port=8000)
