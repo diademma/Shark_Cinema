@@ -19,6 +19,7 @@ room_state = {
     "owner_sid": None,
     "mode": "iframe",
     "current_url": "https://kinovibe.cc/",
+    "media_title": "",
     "playlist": [],
     "current_ep_index": 0,
     "connected_count": 0,
@@ -51,6 +52,7 @@ def save_state_to_disk():
         data_to_save = {
             "mode": room_state["mode"],
             "current_url": room_state["current_url"],
+            "media_title": room_state["media_title"],
             "playlist": room_state["playlist"],
             "current_ep_index": room_state["current_ep_index"]
         }
@@ -67,6 +69,7 @@ def load_state_from_disk():
                 saved = json.load(f)
                 room_state["mode"] = saved.get("mode", "iframe")
                 room_state["current_url"] = saved.get("current_url", "https://kinovibe.cc/")
+                room_state["media_title"] = saved.get("media_title", "")
                 room_state["playlist"] = saved.get("playlist", [])
                 room_state["current_ep_index"] = saved.get("current_ep_index", 0)
                 print("[💾] Room state restored from disk!")
@@ -75,6 +78,18 @@ def load_state_from_disk():
 
 load_state_from_disk()
 kv_cookies = load_cookies_from_disk()
+
+# Извлечение чистого названия фильма/сериала из HTML
+def extract_clean_title(html):
+    m = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.IGNORECASE | re.DOTALL)
+    if not m:
+        m = re.search(r'<title>(.*?)</title>', html, re.IGNORECASE)
+    if m:
+        raw_t = re.sub(r'<[^>]+>', '', m.group(1)).strip()
+        raw_t = re.sub(r'\s*смотреть онлайн.*', '', raw_t, flags=re.IGNORECASE).strip()
+        raw_t = re.sub(r'\s*в HD.*', '', raw_t, flags=re.IGNORECASE).strip()
+        return raw_t
+    return "Кинофильм"
 
 async def proxy_video(request):
     target_url = request.query.get("url")
@@ -150,7 +165,7 @@ async def fetch_playerjs_playlist(session, pl_url):
                             clean_title = f"{len(playlist)+1} Серия"
                         playlist.append({"title": clean_title, "url": item["file"]})
             except Exception as json_err:
-                print(f"[⚠️] JSON parse failed on corrupt bytes: {json_err}. Switching to Regex Fallback!")
+                print(f"[⚠️] JSON parse failed: {json_err}")
 
             if not playlist:
                 entries = re.findall(r'"file"\s*:\s*"([^"]+)"', text)
@@ -265,7 +280,8 @@ async def switch_episode(sid, data):
         await sio.emit('player_command', {
             'action': 'update_playlist', 
             'playlist': room_state["playlist"], 
-            'currentIndex': idx
+            'currentIndex': idx,
+            'media_title': room_state["media_title"]
         })
         await sio.emit('player_command', {
             'action': 'load_video', 
@@ -277,7 +293,7 @@ async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Guest PiP v5.5 сканирует...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Visual Polish v6.0 сканирует...', 'details': url}, to=sid)
 
     try:
         headers = {
@@ -289,6 +305,10 @@ async def extract_magic(sid, data):
             async with session.get(url, timeout=12) as resp:
                 html = await resp.text()
                 
+                # Вытаскиваем заглавное название тайтла
+                media_title = extract_clean_title(html)
+                room_state["media_title"] = media_title
+                
                 match_file = re.search(r'file\s*:\s*["\']([^"\'\s]+)["\']', html, re.IGNORECASE)
                 
                 if match_file:
@@ -297,7 +317,7 @@ async def extract_magic(sid, data):
                     if ".txt" in found_path or ".json" in found_path:
                         pl_url = found_path if found_path.startswith('http') else ("https:" + found_path if found_path.startswith('//') else "https://kinovibe.cc" + (found_path if found_path.startswith('/') else '/' + found_path))
                         
-                        await sio.emit('server_log', {'type': 'SUCCESS', 'msg': 'Найден плейлист серий!', 'details': pl_url}, to=sid)
+                        await sio.emit('server_log', {'type': 'SUCCESS', 'msg': 'Найден плейлист!', 'details': pl_url}, to=sid)
                         playlist = await fetch_playerjs_playlist(session, pl_url)
                         
                         if playlist:
@@ -308,12 +328,13 @@ async def extract_magic(sid, data):
                             
                             save_state_to_disk()
                             
-                            await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'Загружено серий: {len(playlist)}!', 'details': 'Запускаю 1-ю серию'}, to=sid)
+                            await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'Загружено серий: {len(playlist)}!', 'details': f'Запускаю: {media_title}'}, to=sid)
                             
                             await sio.emit('player_command', {
                                 'action': 'update_playlist', 
                                 'playlist': playlist, 
-                                'currentIndex': 0
+                                'currentIndex': 0,
+                                'media_title': media_title
                             })
                             await sio.emit('player_command', {
                                 'action': 'load_video', 
@@ -332,12 +353,13 @@ async def extract_magic(sid, data):
                         
                         save_state_to_disk()
                         
-                        await sio.emit('server_log', {'type': 'SUCCESS', 'msg': 'Найден одиночный Фильм!', 'details': movie_url}, to=sid)
+                        await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'Найден Фильм: {media_title}', 'details': movie_url}, to=sid)
                         
                         await sio.emit('player_command', {
                             'action': 'update_playlist', 
                             'playlist': movie_playlist, 
-                            'currentIndex': 0
+                            'currentIndex': 0,
+                            'media_title': media_title
                         })
                         await sio.emit('player_command', {
                             'action': 'load_video', 
