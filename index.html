@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v2.5 SyncPlay</title>
+    <title>Shark Cinema 🦈 v2.6</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -92,9 +92,8 @@
 
         @media (max-width: 600px) { .player-container { height: 400px; } }
     </style>
-    <!-- HLS.js для проигрывания сырых ссылок m3u8 -->
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=2.5.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=2.6.0"></script>
 </head>
 <body>
 
@@ -111,7 +110,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v2.5 SyncPlay</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v2.6 Fixed</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -131,7 +130,6 @@
     <div class="player-container">
         <div class="guest-overlay" id="guestOverlay"></div>
         <iframe id="mainIframe" src="https://kinovibe.cc/" allowfullscreen></iframe>
-        <!-- Новый нативный плеер для SyncPlay -->
         <video id="mainVideo" controls crossorigin playsinline></video>
     </div>
 
@@ -144,7 +142,7 @@
     </div>
 
     <script>
-        const VERSION = "2.5.0";
+        const VERSION = "2.6.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -192,13 +190,7 @@
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v2.5';
-        });
-
-        socket.on('connect_error', (err) => {
-            addLog('ERROR', 'Ошибка WebSocket!', err.message);
-            document.getElementById('serverBadge').className = 'badge badge-offline';
-            document.getElementById('serverBadge').innerText = '🔴 Ошибка связи';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v2.6';
         });
 
         socket.on('auth_result', (data) => {
@@ -209,32 +201,23 @@
                 document.getElementById('ownerPanel').style.display = 'block';
                 document.getElementById('roleBadge').className = 'badge badge-owner';
                 document.getElementById('roleBadge').innerText = 'Owner 👑';
-            } else {
-                addLog('ERROR', 'Отказ авторизации!', data.message);
-                document.getElementById('loginBtn').innerText = "Войти как Owner";
-                document.getElementById('loginBtn').disabled = false;
             }
         });
 
-        // Слушаем логи НАПРЯМУЮ ИЗ PYTHON (Скрипт-экстрактор пишет логи сюда)
         socket.on('server_log', (data) => {
             addLog(data.type, data.msg, data.details);
         });
 
-        // Получение состояния комнаты при входе
         socket.on('room_state', (state) => {
             addLog('INFO', 'Состояние комнаты:', state.mode);
-            if (!isOwner) {
-                if (state.mode === 'iframe' && iframe.src !== state.current_url) {
-                    iframe.src = state.current_url;
-                    switchToIframe();
-                } else if (state.mode === 'video' && state.current_url) {
-                    loadRawVideo(state.current_url);
-                }
+            if (state.mode === 'iframe' && iframe.src !== state.current_url) {
+                iframe.src = state.current_url;
+                switchToIframe();
+            } else if (state.mode === 'video' && state.current_url) {
+                loadRawVideo(state.current_url);
             }
         });
 
-        // === УПРАВЛЕНИЕ РЕЖИМАМИ ===
         function switchToIframe() {
             video.style.display = 'none';
             iframe.style.display = 'block';
@@ -243,7 +226,7 @@
         }
 
         function loadRawVideo(url) {
-            addLog('SUCCESS', 'Запуск чистого видео (SyncPlay):', url);
+            addLog('SUCCESS', 'Включаю плеер с видео:', url);
             iframe.style.display = 'none';
             video.style.display = 'block';
             
@@ -252,15 +235,18 @@
                 hlsPlayer = new Hls();
                 hlsPlayer.loadSource(url);
                 hlsPlayer.attachMedia(video);
+                hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(e => addLog('WARN', 'Кликни по плееру (автоплей блочит браузер)'));
+                });
             } else {
                 video.src = url;
+                video.play().catch(e => addLog('WARN', 'Кликни по плееру (автоплей блочит браузер)'));
             }
         }
 
-        // === SYNC PLAY: СОБЫТИЯ ОТ СЕРВЕРА К ЗРИТЕЛЮ ===
+        // === ИСПРАВЛЕННАЯ ЛОГИКА ===
         socket.on('player_command', (data) => {
-            if (isOwner) return; // Овнер сам управляет плеером
-            
+            // 1. СМЕНУ ИНТЕРФЕЙСА ОБРАБАТЫВАЮТ ВСЕ (И Овнер, и Зритель)
             if (data.action === 'load_iframe') {
                 iframe.src = data.url;
                 switchToIframe();
@@ -269,10 +255,13 @@
                 loadRawVideo(data.url);
             }
             
+            // 2. А ВОТ ЧУЖУЮ ПАУЗУ/ПЛЕЙ ОВНЕР ИГНОРИРУЕТ (ОН РУЛИТ САМ)
+            if (isOwner) return; 
+            
             if (data.action === 'play') {
                 ignoreNextEvent = true;
                 if (Math.abs(video.currentTime - data.time) > 2) video.currentTime = data.time;
-                video.play().catch(e => addLog('ERROR', 'Автоплей заблокирован браузером', 'Зритель должен кликнуть по экрану раз'));
+                video.play().catch(e => console.log(e));
             }
             if (data.action === 'pause') {
                 ignoreNextEvent = true;
@@ -285,7 +274,7 @@
             }
         });
 
-        // === SYNC PLAY: СОБЫТИЯ ОТ ОВНЕРА К СЕРВЕРУ ===
+        // Отправка событий от Овнера
         video.addEventListener('play', () => {
             if (isOwner && !ignoreNextEvent) socket.emit('player_action', { action: 'play', time: video.currentTime });
             ignoreNextEvent = false;
@@ -299,17 +288,14 @@
             ignoreNextEvent = false;
         });
 
-        // === КНОПКИ ПАНЕЛИ ===
         function loginOwner() {
             const pin = document.getElementById('pinInput').value.trim();
-            document.getElementById('loginBtn').innerText = "Проверка...";
-            document.getElementById('loginBtn').disabled = true;
             socket.emit('auth_owner', { pin: pin });
         }
 
         function loginGuest() {
             document.getElementById('authModal').style.display = 'none';
-            document.getElementById('guestOverlay').style.display = 'block'; // Блок кликов по iframe
+            document.getElementById('guestOverlay').style.display = 'block';
         }
 
         function loadIframe() {
@@ -322,8 +308,8 @@
 
         function extractVideo() {
             const url = document.getElementById('targetUrl').value.trim();
-            if (!url) return alert('Вставь ссылку на фильм для извлечения!');
-            addLog('INFO', 'Магия: Отправляем запрос на парсинг в Python...', url);
+            if (!url) return alert('Вставь ссылку на фильм!');
+            addLog('INFO', 'Запрос на парсинг...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
