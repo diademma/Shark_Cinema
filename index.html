@@ -43,7 +43,6 @@
         .btn-owner { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: white; width: 100%; margin-bottom: 12px; }
         .btn-guest { background: transparent; color: #9d8ec4; border: 1px solid #332252; width: 100%; }
         
-        /* Единый стиль кнопок управления */
         .btn-action { 
             background: #231738; color: #e2dbf8; border: 1px solid #3d2b63; 
             flex: 1; min-width: 180px; padding: 13px 18px;
@@ -52,7 +51,6 @@
         .btn-magic { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: white; border: none; }
         .btn-sync { background: linear-gradient(135deg, #2ed573, #10ac84); color: white; border: none; display: none; }
 
-        /* Центрированный Элитный Заголовок */
         .header-container { 
             width: 100%; max-width: 950px; display: flex; flex-direction: column; 
             align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px; 
@@ -128,7 +126,6 @@
         
         .guest-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; background: transparent; }
 
-        /* Векторные фиолетовые кнопки плавающего контроля */
         .floating-player-controls {
             position: absolute; top: 15px; right: 15px; z-index: 300; display: flex; gap: 8px;
         }
@@ -160,7 +157,7 @@
         .log-console-bar {
             position: fixed; bottom: 0; left: 0; width: 100%; background: #120e24; 
             border-top: 1px solid #332252; z-index: 8000; font-family: monospace; font-size: 11px;
-            display: none; /* Скрыто по умолчанию для Зрителей */
+            display: none;
         }
         .log-header {
             padding: 10px 15px; background: #1a1433; display: flex; justify-content: space-between; 
@@ -176,7 +173,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } .countdown-num { font-size: 100px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=6.0.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=6.1.0"></script>
 </head>
 <body>
 
@@ -192,7 +189,6 @@
         </div>
     </div>
 
-    <!-- Центрированный Элитный Заголовок -->
     <div class="header-container">
         <div class="logo-title">Shark Cinema 🦈</div>
         <div class="status-group">
@@ -220,7 +216,6 @@
             </button>
         </div>
 
-        <!-- Авторизация Kinovibe (Скрывается если уже подключено) -->
         <div id="kvAuthBox" style="margin-top: 15px; border-top: 1px solid #332252; padding-top: 12px;">
             <small style="color: #9d8ec4; display: block; margin-bottom: 8px;">🔑 Подключение аккаунта Kinovibe (для разблокировки HD):</small>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -248,7 +243,6 @@
     <div class="player-container">
         <div class="guest-overlay" id="guestOverlay"></div>
 
-        <!-- Векторные плавающие кнопки -->
         <div class="floating-player-controls">
             <button class="btn-floating" id="pipBtn" onclick="togglePiP()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="3" width="20" height="14" rx="2"/><rect x="11" y="9" width="9" height="6" rx="1"/></svg>
@@ -269,7 +263,6 @@
         <video id="mainVideo" controls playsinline></video>
     </div>
 
-    <!-- Консоль логов (Видна ТОЛЬКО Овнеру) -->
     <div class="log-console-bar">
         <div class="log-header" onclick="toggleLogs()">
             <span>🐞 Живой Лог Ошибок <span id="logCount">(0)</span></span>
@@ -279,9 +272,12 @@
     </div>
 
     <script>
-        const VERSION = "6.0.0";
+        const VERSION = "6.1.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
+
+        // Запоминание сохраненного ПИНа в браузере
+        let pendingOwnerPin = localStorage.getItem('shark_owner_pin') || null;
 
         function addLog(type, msg, details = '') {
             logCounter++;
@@ -372,24 +368,41 @@
         guestOverlay.addEventListener('touchend', handleDoubleTap);
         guestOverlay.addEventListener('dblclick', toggleFullscreen);
 
+        // === МГНОВЕННОЕ ПОДКЛЮЧЕНИЕ И АВТО-ВХОД ===
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             const badge = document.getElementById('serverBadge');
             badge.className = 'badge badge-online';
-            badge.innerText = '💚 На связи'; // 💚 Зеленое сердечко вместо кругляшки!
+            badge.innerText = '💚 На связи';
+
+            // Авторизуем овнера автоматически, если ПИН сохранен
+            if (pendingOwnerPin) {
+                addLog('INFO', 'Авторизация сохраненного Овнера...');
+                socket.emit('auth_owner', { pin: pendingOwnerPin });
+            }
         });
 
         socket.on('auth_result', (data) => {
+            const btn = document.getElementById('loginBtn');
+            btn.innerText = "Войти как Owner";
+            btn.disabled = false;
+
             if (data.success) {
                 isOwner = true;
-                addLog('SUCCESS', 'Овнер авторизован!');
+                if (pendingOwnerPin) {
+                    localStorage.setItem('shark_owner_pin', pendingOwnerPin);
+                }
+                addLog('SUCCESS', 'Овнер успешно авторизован!');
                 document.getElementById('authModal').style.display = 'none';
                 document.getElementById('ownerPanel').style.display = 'block';
                 document.getElementById('roleBadge').className = 'badge badge-owner';
                 document.getElementById('roleBadge').innerText = 'Owner 👑';
-                
-                // Показываем логи ТОЛЬКО Овнеру
                 document.querySelector('.log-console-bar').style.display = 'block';
+            } else {
+                pendingOwnerPin = null;
+                localStorage.removeItem('shark_owner_pin');
+                addLog('ERROR', 'Отказ авторизации! Неверный ПИН');
+                alert('Неверный ПИН-код Овнера!');
             }
         });
 
@@ -397,7 +410,7 @@
 
         socket.on('kinovibe_auth_result', (data) => {
             if (data.success) {
-                document.getElementById('kvAuthBox').style.display = 'none'; // Скрываем форму если залогинен
+                document.getElementById('kvAuthBox').style.display = 'none';
                 addLog('SUCCESS', 'Kinovibe HD Аккаунт подсоединен!');
             } else {
                 addLog('ERROR', 'Ошибка входа Kinovibe!', data.msg);
@@ -406,8 +419,6 @@
 
         socket.on('room_state', (state) => {
             addLog('INFO', 'Состояние комнаты:', state.mode);
-            
-            // Если аккаунт Kinovibe подключен — скрываем окно входа
             if (state.has_kv_cookies) {
                 document.getElementById('kvAuthBox').style.display = 'none';
             }
@@ -425,6 +436,28 @@
                 }
             }
         });
+
+        function loginOwner() {
+            const pin = document.getElementById('pinInput').value.trim();
+            if (!pin) return alert('Введи ПИН!');
+
+            pendingOwnerPin = pin;
+            const btn = document.getElementById('loginBtn');
+            btn.innerText = "⏳ Проверка ПИНа...";
+            btn.disabled = true;
+
+            if (socket.connected) {
+                socket.emit('auth_owner', { pin: pin });
+            } else {
+                addLog('WARN', 'Ожидание подключения сокета к VPS...');
+            }
+        }
+
+        function loginGuest() {
+            document.getElementById('authModal').style.display = 'none';
+            document.getElementById('guestOverlay').style.display = 'block';
+            addLog('INFO', 'Вход зрителя.');
+        }
 
         function connectKinovibeHD() {
             const login = document.getElementById('kvLogin').value.trim();
@@ -569,18 +602,6 @@
             ignoreNextEvent = false;
         });
 
-        function loginOwner() {
-            const pin = document.getElementById('pinInput').value.trim();
-            socket.emit('auth_owner', { pin: pin });
-        }
-
-        function loginGuest() {
-            document.getElementById('authModal').style.display = 'none';
-            document.getElementById('guestOverlay').style.display = 'block';
-            addLog('INFO', 'Вход зрителя.');
-        }
-
-        // Отрисовка заглавного названия фильма/сериала
         function renderPlaylist(playlist, activeIndex = 0, mediaTitle = "") {
             currentPlaylist = playlist;
             currentEpIndex = activeIndex;
@@ -630,7 +651,7 @@
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку!');
             document.getElementById('syncStartBtn').style.display = 'none';
-            addLog('INFO', 'Запуск v6.0 Visual Polish...', url);
+            addLog('INFO', 'Запуск Instant Auth v6.1...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
