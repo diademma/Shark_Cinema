@@ -30,7 +30,14 @@ async def proxy_handler(request):
         res = requests.get(target_url, headers=headers, timeout=10)
         html = res.text
 
-        # Внедряем микро-скрипт перехвата видео-тега
+        # 1. Автоматом подтягиваем стили и картинки Киновайба
+        base_tag = f'<base href="{target_url}">'
+        if "<head>" in html:
+            html = html.replace("<head>", f"<head>{base_tag}")
+        else:
+            html = base_tag + html
+
+        # 2. Внедряем микро-скрипт перехвата видео-тега
         detector_script = """
         <script>
         (function() {
@@ -120,5 +127,5 @@ async def sync_action(sid, data):
         await sio.emit('sync_event', {'action': 'seek', 'time': room_state["current_time"]}, skip_sid=sid)
 
 if __name__ == '__main__':
-    print(f"[READY] Server v2.1 running! PIN: {OWNER_PIN}")
+    print(f"[READY] Server v2.2 running! PIN: {OWNER_PIN}")
     web.run_app(app, host='0.0.0.0', port=8000)
