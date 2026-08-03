@@ -12,20 +12,113 @@ sio.attach(app)
 
 OWNER_PIN = os.getenv("OWNER_PIN", "18349276")
 
+STATE_FILE = "room_state.json"
+COOKIES_FILE = "kinovibe_cookies.json"
+
 room_state = {
     "owner_sid": None,
     "mode": "iframe",
     "current_url": "https://kinovibe.cc/",
     "playlist": [],
     "current_ep_index": 0,
-    "connected_count": 0
+    "connected_count": 0,
+    "has_kv_cookies": False
 }
 
-# --- ПАРСЕР ПЛЕЙЛИСТА PLAYERJS (.txt / .json) ---
+def load_cookies_from_disk():
+    if os.path.exists(COOKIES_FILE):
+        try:
+            with open(COOKIES_FILE, "r", encoding="utf-8") as f:
+                c_dict = json.load(f)
+                room_state["has_kv_cookies"] = True
+                print("[🔑] Kinovibe HD Cookies loaded!")
+                return c_dict
+        except Exception as e:
+            print(f"[❌] Error loading cookies: {e}")
+    return {}
+
+def save_cookies_to_disk(c_dict):
+    try:
+        with open(COOKIES_FILE, "w", encoding="utf-8") as f:
+            json.dump(c_dict, f, indent=2)
+            room_state["has_kv_cookies"] = True
+            print("[💾] Kinovibe HD Cookies saved!")
+    except Exception as e:
+        print(f"[❌] Error saving cookies: {e}")
+
+def save_state_to_disk():
+    try:
+        data_to_save = {
+            "mode": room_state["mode"],
+            "current_url": room_state["current_url"],
+            "playlist": room_state["playlist"],
+            "current_ep_index": room_state["current_ep_index"]
+        }
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data_to_save, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[❌] Error saving state: {e}")
+
+def load_state_from_disk():
+    global room_state
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                saved = json.load(f)
+                room_state["mode"] = saved.get("mode", "iframe")
+                room_state["current_url"] = saved.get("current_url", "https://kinovibe.cc/")
+                room_state["playlist"] = saved.get("playlist", [])
+                room_state["current_ep_index"] = saved.get("current_ep_index", 0)
+                print("[💾] Room state restored from disk!")
+        except Exception as e:
+            print(f"[❌] Error loading state: {e}")
+
+load_state_from_disk()
+kv_cookies = load_cookies_from_disk()
+
+async def proxy_video(request):
+    target_url = request.query.get("url")
+    if not target_url: return web.Response(status=400, text="Missing url")
+
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Referer": "https://kinovibe.cc/",
+        "Origin": "https://kinovibe.cc"
+    }
+
+    range_header = request.headers.get("Range")
+    if range_header: headers["Range"] = range_header
+
+    try:
+        async with ClientSession() as session:
+            async with session.get(target_url, headers=headers, allow_redirects=True) as resp:
+                proxy_resp = web.StreamResponse(
+                    status=resp.status,
+                    headers={
+                        "Content-Type": resp.headers.get("Content-Type", "video/mp4"),
+                        "Access-Control-Allow-Origin": "*",
+                        "Accept-Ranges": resp.headers.get("Accept-Ranges", "bytes"),
+                        "Content-Length": resp.headers.get("Content-Length", ""),
+                        "Content-Range": resp.headers.get("Content-Range", "")
+                    }
+                )
+                proxy_resp.headers = {k: v for k, v in proxy_resp.headers.items() if v}
+                await proxy_resp.prepare(request)
+                
+                async for chunk in resp.content.iter_chunked(64 * 1024):
+                    await proxy_resp.write(chunk)
+
+                await proxy_resp.write_eof()
+                return proxy_resp
+    except Exception as e:
+        return web.Response(status=500, text=str(e))
+
+app.router.add_get('/proxy_video', proxy_video)
+
 async def fetch_playerjs_playlist(session, pl_url):
     try:
         headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://kinovibe.cc/"}
-        async with session.get(pl_url, headers=headers, timeout=8) as resp:
+        async with session.get(pl_url, headers=headers, cookies=kv_cookies, timeout=8) as resp:
             text = await resp.text()
             
             if not text.strip().startswith('[') and not text.strip().startswith('{'):
@@ -71,17 +164,46 @@ async def auth_owner(sid, data):
     else:
         await sio.emit('auth_result', {'success': False}, to=sid)
 
-# === TRUESYNC СОБЫТИЯ ===
+# --- АВТОРИЗАЦИЯ KINOVIBE ДЛЯ 720p/1080p HD ---
+@sio.event
+async def kinovibe_login(sid, data):
+    global kv_cookies
+    if sid != room_state["owner_sid"]: return
+    
+    username = data.get("login")
+    password = data.get("password")
+    
+    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://kinovibe.cc/"}
+    payload = {
+        "login_name": username,
+        "login_password": password,
+        "login": "submit"
+    }
+    
+    try:
+        async with ClientSession() as session:
+            async with session.post("https://kinovibe.cc/index.php?subaction=dologin", data=payload, headers=headers) as resp:
+                cookies_dict = {}
+                for cookie in session.cookie_jar:
+                    cookies_dict[cookie.key] = cookie.value
+                
+                if "dle_user_id" in cookies_dict or "dle_password" in cookies_dict:
+                    kv_cookies = cookies_dict
+                    save_cookies_to_disk(cookies_dict)
+                    await sio.emit('kinovibe_auth_result', {'success': True, 'msg': 'Успешный вход! HD аккаунт активен.'}, to=sid)
+                else:
+                    await sio.emit('kinovibe_auth_result', {'success': False, 'msg': 'Неверный логин или пароль Kinovibe!'}, to=sid)
+    except Exception as e:
+        await sio.emit('kinovibe_auth_result', {'success': False, 'msg': f'Ошибка сети: {str(e)}'}, to=sid)
+
 @sio.event
 async def trigger_countdown(sid):
     if sid == room_state["owner_sid"]:
-        print("[🚀] Owner triggered 5-sec countdown!")
         await sio.emit('start_countdown')
 
 @sio.event
 async def guest_ready_sync(sid):
     if room_state["owner_sid"]:
-        print(f"[🔍] Guest {sid} requesting current time from Owner...")
         await sio.emit('request_owner_time', {'guest_sid': sid}, to=room_state["owner_sid"])
 
 @sio.event
@@ -89,7 +211,6 @@ async def owner_time_response(sid, data):
     if sid == room_state["owner_sid"]:
         guest_sid = data.get("guest_sid")
         if guest_sid:
-            print(f"[⏱] Forwarding time {data['time']}s to Guest {guest_sid}")
             await sio.emit('apply_sync_late', data, to=guest_sid)
 
 @sio.event
@@ -102,6 +223,7 @@ async def player_action(sid, data):
     elif action == "load_video":
         room_state["mode"] = "video"
         room_state["current_url"] = data.get("url")
+    save_state_to_disk()
     await sio.emit('player_command', data, skip_sid=sid)
 
 @sio.event
@@ -114,6 +236,8 @@ async def switch_episode(sid, data):
         room_state["mode"] = "video"
         room_state["current_url"] = ep["url"]
         
+        save_state_to_disk()
+        
         await sio.emit('player_command', {
             'action': 'update_playlist', 
             'playlist': room_state["playlist"], 
@@ -124,30 +248,28 @@ async def switch_episode(sid, data):
             'url': ep["url"]
         })
 
-# === УНИВЕРСАЛЬНЫЙ ИЗВЛЕКАТЕЛЬ МЕДИА (ФИЛЬМЫ И СЕРИАЛЫ) ===
 @sio.event
 async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Universal TrueSync v5.1 сканирует...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Auto-HD v5.3 сканирует...', 'details': url}, to=sid)
 
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             "Referer": "https://kinovibe.cc/"
         }
-        async with ClientSession(headers=headers) as session:
+
+        async with ClientSession(headers=headers, cookies=kv_cookies) as session:
             async with session.get(url, timeout=12) as resp:
                 html = await resp.text()
                 
-                # 1. Поиск file: в переменной Playerjs
                 match_file = re.search(r'file\s*:\s*["\']([^"\'\s]+)["\']', html, re.IGNORECASE)
                 
                 if match_file:
                     found_path = match_file.group(1).strip()
                     
-                    # ВЕТВЬ А: Если в file: лежит ПЛЕЙЛИСТ (.txt / .json) -> СЕРИАЛ ИЛИ АНИМЕ
                     if ".txt" in found_path or ".json" in found_path:
                         pl_url = found_path if found_path.startswith('http') else ("https:" + found_path if found_path.startswith('//') else "https://kinovibe.cc" + (found_path if found_path.startswith('/') else '/' + found_path))
                         
@@ -160,7 +282,9 @@ async def extract_magic(sid, data):
                             room_state["mode"] = "video"
                             room_state["current_url"] = playlist[0]["url"]
                             
-                            await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'Мгновенно загружено серий: {len(playlist)}!', 'details': 'Включаю 1-ю серию'}, to=sid)
+                            save_state_to_disk()
+                            
+                            await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'Загружено серий: {len(playlist)}!', 'details': 'Запускаю 1-ю серию'}, to=sid)
                             
                             await sio.emit('player_command', {
                                 'action': 'update_playlist', 
@@ -173,7 +297,6 @@ async def extract_magic(sid, data):
                             })
                             return
 
-                    # ВЕТВЬ Б: Если в file: лежит ПРЯМОЕ ВИДЕО (.mp4 / .m3u8) -> ОДИНОЧНЫЙ ФИЛЬМ
                     elif ".mp4" in found_path or ".m3u8" in found_path:
                         movie_url = found_path if found_path.startswith('http') else ("https:" + found_path if found_path.startswith('//') else "https://kinovibe.cc" + (found_path if found_path.startswith('/') else '/' + found_path))
                         
@@ -182,6 +305,8 @@ async def extract_magic(sid, data):
                         room_state["current_ep_index"] = 0
                         room_state["mode"] = "video"
                         room_state["current_url"] = movie_url
+                        
+                        save_state_to_disk()
                         
                         await sio.emit('server_log', {'type': 'SUCCESS', 'msg': 'Найден одиночный Фильм!', 'details': movie_url}, to=sid)
                         
