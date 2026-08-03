@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v2.9 Proxy Engine</title>
+    <title>Shark Cinema 🦈 v3.0 Series Engine</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -65,6 +65,31 @@
             font-size: 14px; outline: none; min-width: 250px;
         }
 
+        /* Панель переключения серий */
+        .series-panel {
+            width: 100%; max-width: 950px; background: #171026;
+            border: 1px solid #332252; padding: 15px; border-radius: 18px;
+            margin-bottom: 15px; display: none; box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        .series-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 12px; font-weight: bold; color: #c77dff; flex-wrap: wrap; gap: 10px;
+        }
+        .series-grid {
+            display: flex; gap: 8px; flex-wrap: wrap; max-height: 120px; overflow-y: auto;
+        }
+        .btn-ep {
+            padding: 8px 14px; background: #0f0a1c; border: 1px solid #3d2b63;
+            color: #e2dbf8; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: bold;
+            transition: 0.2s;
+        }
+        .btn-ep:hover { border-color: #9d4edd; color: #c77dff; }
+        .btn-ep.active { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: white; border: none; }
+        .btn-nav-ep {
+            padding: 8px 16px; background: #332252; color: white; border: none;
+            border-radius: 10px; cursor: pointer; font-weight: bold; font-size: 13px;
+        }
+
         .player-container { 
             width: 100%; max-width: 950px; height: 600px; 
             position: relative; background: #000; border-radius: 20px; 
@@ -93,7 +118,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=2.9.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=3.0.0"></script>
 </head>
 <body>
 
@@ -110,7 +135,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v2.9 Proxy Engine</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v3.0 Series Engine</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -119,18 +144,29 @@
 
     <div class="owner-panel" id="ownerPanel">
         <div style="display: flex; gap: 10px; width: 100%; flex-wrap: wrap;">
-            <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка на Kinovibe ИЛИ прямая ссылка (.mp4 / .m3u8)">
+            <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка на Kinovibe (например: kinovibe.cc/36738-radar...)">
         </div>
         <div class="controls-row">
             <button class="btn btn-owner" style="width: auto; padding: 0 15px;" onclick="loadIframe()">🌐 Открыть сайт</button>
-            <button class="btn btn-magic" style="width: auto; padding: 0 15px;" onclick="extractVideo()">🚀 Запустить SyncPlay</button>
+            <button class="btn btn-magic" style="width: auto; padding: 0 15px;" onclick="extractVideo()">🚀 Авто-извлечение серий</button>
         </div>
+    </div>
+
+    <!-- Удобная Панель Выбора Серий -->
+    <div class="series-panel" id="seriesPanel">
+        <div class="series-header">
+            <span id="currentEpTitle">🎬 Найдено серий: 0</span>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn-nav-ep" id="prevEpBtn" onclick="switchEpRelative(-1)">◀ Пред.</button>
+                <button class="btn-nav-ep" id="nextEpBtn" onclick="switchEpRelative(1)">След. ▶</button>
+            </div>
+        </div>
+        <div class="series-grid" id="seriesGrid"></div>
     </div>
 
     <div class="player-container">
         <div class="guest-overlay" id="guestOverlay"></div>
         <iframe id="mainIframe" src="https://kinovibe.cc/" allowfullscreen></iframe>
-        <!-- Чистый тег видео без блочащих атрибутов -->
         <video id="mainVideo" controls playsinline></video>
     </div>
 
@@ -143,7 +179,7 @@
     </div>
 
     <script>
-        const VERSION = "2.9.0";
+        const VERSION = "3.0.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -187,11 +223,13 @@
         let isOwner = false;
         let hlsPlayer = null;
         let ignoreNextEvent = false;
+        let currentPlaylist = [];
+        let currentEpIndex = 0;
 
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v2.9';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v3.0';
         });
 
         socket.on('auth_result', (data) => {
@@ -211,6 +249,9 @@
 
         socket.on('room_state', (state) => {
             addLog('INFO', 'Состояние комнаты:', state.mode);
+            if (state.playlist && state.playlist.length > 0) {
+                renderPlaylist(state.playlist, state.current_ep_index || 0);
+            }
             if (state.mode === 'iframe' && iframe.src !== state.current_url) {
                 iframe.src = state.current_url;
                 switchToIframe();
@@ -227,9 +268,8 @@
         }
 
         function loadRawVideo(rawUrl) {
-            // Проксируем видео через наш VPS для защиты от 403 Forbidden и CORS
             const proxiedUrl = `${SERVER_URL}/proxy_video?url=${encodeURIComponent(rawUrl)}`;
-            addLog('SUCCESS', 'Запуск видео через VPS Туннель:', proxiedUrl);
+            addLog('SUCCESS', 'Запуск серии через VPS:', proxiedUrl);
             
             iframe.style.display = 'none';
             video.style.display = 'block';
@@ -240,11 +280,47 @@
                 hlsPlayer.loadSource(proxiedUrl);
                 hlsPlayer.attachMedia(video);
                 hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-                    video.play().catch(e => addLog('WARN', 'Кликни по видео для старта'));
+                    video.play().catch(e => addLog('WARN', 'Кликни по экрану для воспроизведения'));
                 });
             } else {
                 video.src = proxiedUrl;
-                video.play().catch(e => addLog('WARN', 'Кликни по видео для старта'));
+                video.play().catch(e => addLog('WARN', 'Кликни по экрану для воспроизведения'));
+            }
+        }
+
+        // Отрисовка кнопок серий
+        function renderPlaylist(playlist, activeIndex = 0) {
+            currentPlaylist = playlist;
+            currentEpIndex = activeIndex;
+            
+            const panel = document.getElementById('seriesPanel');
+            const grid = document.getElementById('seriesGrid');
+            const title = document.getElementById('currentEpTitle');
+            
+            panel.style.display = 'block';
+            grid.innerHTML = '';
+            
+            title.innerText = `🎬 Играет: ${playlist[activeIndex].title} (из ${playlist.length})`;
+
+            playlist.forEach((ep, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `btn-ep ${idx === activeIndex ? 'active' : ''}`;
+                btn.innerText = ep.title.replace(' Серия', '');
+                btn.onclick = () => selectEpisode(idx);
+                grid.appendChild(btn);
+            });
+        }
+
+        function selectEpisode(index) {
+            if (!isOwner) return alert('Только Овнер может переключать серии!');
+            socket.emit('switch_episode', { index: index });
+        }
+
+        function switchEpRelative(dir) {
+            if (!isOwner) return alert('Только Овнер может переключать серии!');
+            const newIndex = currentEpIndex + dir;
+            if (newIndex >= 0 && newIndex < currentPlaylist.length) {
+                selectEpisode(newIndex);
             }
         }
 
@@ -255,6 +331,9 @@
             }
             if (data.action === 'load_video') {
                 loadRawVideo(data.url);
+            }
+            if (data.action === 'update_playlist') {
+                renderPlaylist(data.playlist, data.currentIndex);
             }
             
             if (isOwner) return; 
@@ -308,8 +387,8 @@
 
         function extractVideo() {
             const url = document.getElementById('targetUrl').value.trim();
-            if (!url) return alert('Вставь ссылку!');
-            addLog('INFO', 'Запуск метода извлечения...', url);
+            if (!url) return alert('Вставь ссылку на страницу сериала!');
+            addLog('INFO', 'Запуск авто-сканера серий v3.0...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
