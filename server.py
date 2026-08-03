@@ -21,112 +21,36 @@ room_state = {
     "connected_count": 0
 }
 
-# --- ВИДЕО ТУННЕЛЬ С ПОДДЕРЖКОЙ DLE РЕДИРЕКТОВ ---
-async def proxy_video(request):
-    target_url = request.query.get("url")
-    if not target_url: return web.Response(status=400, text="Missing url")
-
-    headers = {
-        "User-Agent": "Mozilla/5.0",
-        "Referer": "https://kinovibe.cc/",
-        "Origin": "https://kinovibe.cc"
-    }
-
-    range_header = request.headers.get("Range")
-    if range_header: headers["Range"] = range_header
-
+# --- ПАРСЕР ПЛЕЙЛИСТА PLAYERJS (.txt / .json) ---
+async def fetch_playerjs_playlist(session, pl_url):
     try:
-        async with ClientSession() as session:
-            async with session.get(target_url, headers=headers, allow_redirects=True) as resp:
-                proxy_resp = web.StreamResponse(
-                    status=resp.status,
-                    headers={
-                        "Content-Type": resp.headers.get("Content-Type", "video/mp4"),
-                        "Access-Control-Allow-Origin": "*",
-                        "Accept-Ranges": resp.headers.get("Accept-Ranges", "bytes"),
-                        "Content-Length": resp.headers.get("Content-Length", ""),
-                        "Content-Range": resp.headers.get("Content-Range", "")
-                    }
-                )
-                proxy_resp.headers = {k: v for k, v in proxy_resp.headers.items() if v}
-                await proxy_resp.prepare(request)
-                
-                async for chunk in resp.content.iter_chunked(64 * 1024):
-                    await proxy_resp.write(chunk)
-
-                await proxy_resp.write_eof()
-                return proxy_resp
-    except Exception as e:
-        return web.Response(status=500, text=str(e))
-
-app.router.add_get('/proxy_video', proxy_video)
-
-# --- ВСЕЯДНЫЙ СБОРЩИК (ПАРСИТ DLE ССЫЛКИ, [480], [720], KVB.COOL, MP4) ---
-def parse_omnivorous_playlist(html, base_url="https://kinovibe.cc"):
-    episodes_map = {}
-    
-    rows = re.findall(
-        r'(\d+)\s*Серия\s*(\[[^\]]+\])?.*?(<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>)', 
-        html, re.IGNORECASE | re.DOTALL
-    )
-
-    for ep_num_str, voiceover, a_tag, href, label in rows:
-        ep_num = int(ep_num_str)
-        href_clean = href.strip()
-        
-        if href_clean.startswith('//'): href_clean = 'https:' + href_clean
-        elif href_clean.startswith('/'): href_clean = base_url.rstrip('/') + href_clean
-
-        voice = voiceover.strip() if voiceover else ""
-        title = f"{ep_num} Серия {voice}".strip()
-
-        priority = 2 if '720' in a_tag or '720' in label else 1
-        
-        if ep_num not in episodes_map or priority > episodes_map[ep_num]['priority']:
-            episodes_map[ep_num] = {
-                "title": title,
-                "url": href_clean,
-                "priority": priority
-            }
-
-    if episodes_map:
-        playlist = []
-        for num in sorted(episodes_map.keys()):
-            playlist.append({
-                "title": episodes_map[num]["title"],
-                "url": episodes_map[num]["url"]
-            })
-        return playlist
-
-    raw_a = re.findall(r'<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', html, re.IGNORECASE)
-    fallback_playlist = []
-    seen_urls = set()
-
-    for href, label in raw_a:
-        href_clean = href.strip()
-        if href_clean.startswith('//'): href_clean = 'https:' + href_clean
-        elif href_clean.startswith('/'): href_clean = base_url.rstrip('/') + href_clean
-
-        is_media = (
-            '.mp4' in href_clean or 
-            '.m3u8' in href_clean or 
-            'kvb.cool' in href_clean or 
-            'download.php' in href_clean or 
-            'engine/download' in href_clean or
-            '[480]' in label or '[720]' in label
-        )
-
-        if is_media and href_clean not in seen_urls and '/trailer/' not in href_clean and 'trailer' not in href_clean.lower():
-            seen_urls.add(href_clean)
-            m_ep = re.search(r'(?:s\d+e|ep|series|seriya|[/_])(\d+)(?:[_\.]|$)', href_clean, re.IGNORECASE)
-            ep_idx = int(m_ep.group(1)) if m_ep else len(fallback_playlist) + 1
+        headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://kinovibe.cc/"}
+        async with session.get(pl_url, headers=headers, timeout=8) as resp:
+            text = await resp.text()
             
-            fallback_playlist.append({
-                "title": f"{ep_idx} Серия",
-                "url": href_clean
-            })
+            if not text.strip().startswith('[') and not text.strip().startswith('{'):
+                cleaned = re.sub(r'^#[0-9]', '', text.strip())
+                text = base64.b64decode(cleaned).decode('utf-8', errors='ignore')
 
-    return fallback_playlist
+            data = json.loads(text)
+            raw_list = data.get("playlist", []) if isinstance(data, dict) else data
+            
+            playlist = []
+            for item in raw_list:
+                if isinstance(item, dict) and "file" in item:
+                    raw_comment = item.get("comment", "")
+                    clean_title = re.sub(r'<[^>]+>', ' ', raw_comment).strip()
+                    if not clean_title:
+                        clean_title = f"{len(playlist)+1} Серия"
+                        
+                    playlist.append({
+                        "title": clean_title,
+                        "url": item["file"]
+                    })
+            return playlist
+    except Exception as e:
+        print(f"[❌] Error reading Playerjs playlist: {e}")
+        return []
 
 @sio.event
 async def connect(sid, environ):
@@ -147,7 +71,7 @@ async def auth_owner(sid, data):
     else:
         await sio.emit('auth_result', {'success': False}, to=sid)
 
-# === СИСТЕМА TRUESYNC ===
+# === TRUESYNC СОБЫТИЯ ===
 @sio.event
 async def trigger_countdown(sid):
     if sid == room_state["owner_sid"]:
@@ -200,12 +124,13 @@ async def switch_episode(sid, data):
             'url': ep["url"]
         })
 
+# === УНИВЕРСАЛЬНЫЙ ИЗВЛЕКАТЕЛЬ МЕДИА (ФИЛЬМЫ И СЕРИАЛЫ) ===
 @sio.event
 async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Всеядный сканер v5.0...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Universal TrueSync v5.1 сканирует...', 'details': url}, to=sid)
 
     try:
         headers = {
@@ -215,31 +140,66 @@ async def extract_magic(sid, data):
         async with ClientSession(headers=headers) as session:
             async with session.get(url, timeout=12) as resp:
                 html = await resp.text()
-                playlist = parse_omnivorous_playlist(html)
                 
-                if playlist:
-                    room_state["playlist"] = playlist
-                    room_state["current_ep_index"] = 0
-                    room_state["mode"] = "video"
-                    room_state["current_url"] = playlist[0]["url"]
+                # 1. Поиск file: в переменной Playerjs
+                match_file = re.search(r'file\s*:\s*["\']([^"\'\s]+)["\']', html, re.IGNORECASE)
+                
+                if match_file:
+                    found_path = match_file.group(1).strip()
                     
-                    await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'Найдено серий: {len(playlist)}!', 'details': 'Загружаю 1-ю серию на паузе'}, to=sid)
-                    
-                    await sio.emit('player_command', {
-                        'action': 'update_playlist', 
-                        'playlist': playlist, 
-                        'currentIndex': 0
-                    })
-                    await sio.emit('player_command', {
-                        'action': 'load_video', 
-                        'url': playlist[0]["url"]
-                    })
-                    return
+                    # ВЕТВЬ А: Если в file: лежит ПЛЕЙЛИСТ (.txt / .json) -> СЕРИАЛ ИЛИ АНИМЕ
+                    if ".txt" in found_path or ".json" in found_path:
+                        pl_url = found_path if found_path.startswith('http') else ("https:" + found_path if found_path.startswith('//') else "https://kinovibe.cc" + (found_path if found_path.startswith('/') else '/' + found_path))
+                        
+                        await sio.emit('server_log', {'type': 'SUCCESS', 'msg': 'Найден плейлист серий!', 'details': pl_url}, to=sid)
+                        playlist = await fetch_playerjs_playlist(session, pl_url)
+                        
+                        if playlist:
+                            room_state["playlist"] = playlist
+                            room_state["current_ep_index"] = 0
+                            room_state["mode"] = "video"
+                            room_state["current_url"] = playlist[0]["url"]
                             
-                await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Серии не найдены', 'details': 'Проверь ссылку.'}, to=sid)
+                            await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'Мгновенно загружено серий: {len(playlist)}!', 'details': 'Включаю 1-ю серию'}, to=sid)
+                            
+                            await sio.emit('player_command', {
+                                'action': 'update_playlist', 
+                                'playlist': playlist, 
+                                'currentIndex': 0
+                            })
+                            await sio.emit('player_command', {
+                                'action': 'load_video', 
+                                'url': playlist[0]["url"]
+                            })
+                            return
+
+                    # ВЕТВЬ Б: Если в file: лежит ПРЯМОЕ ВИДЕО (.mp4 / .m3u8) -> ОДИНОЧНЫЙ ФИЛЬМ
+                    elif ".mp4" in found_path or ".m3u8" in found_path:
+                        movie_url = found_path if found_path.startswith('http') else ("https:" + found_path if found_path.startswith('//') else "https://kinovibe.cc" + (found_path if found_path.startswith('/') else '/' + found_path))
+                        
+                        movie_playlist = [{"title": "Фильм (Смотреть)", "url": movie_url}]
+                        room_state["playlist"] = movie_playlist
+                        room_state["current_ep_index"] = 0
+                        room_state["mode"] = "video"
+                        room_state["current_url"] = movie_url
+                        
+                        await sio.emit('server_log', {'type': 'SUCCESS', 'msg': 'Найден одиночный Фильм!', 'details': movie_url}, to=sid)
+                        
+                        await sio.emit('player_command', {
+                            'action': 'update_playlist', 
+                            'playlist': movie_playlist, 
+                            'currentIndex': 0
+                        })
+                        await sio.emit('player_command', {
+                            'action': 'load_video', 
+                            'url': movie_url
+                        })
+                        return
+
+                await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Медиапоток не найден', 'details': 'Проверь ссылку.'}, to=sid)
 
     except Exception as e:
-        await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Ошибка парсера!', 'details': str(e)}, to=sid)
+        await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Ошибка сервера!', 'details': str(e)}, to=sid)
 
 if __name__ == '__main__':
     web.run_app(app, host='0.0.0.0', port=8000)
