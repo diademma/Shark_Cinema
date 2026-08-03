@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v3.0 Series Engine</title>
+    <title>Shark Cinema 🦈 v3.2 Omnivorous</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -65,7 +65,7 @@
             font-size: 14px; outline: none; min-width: 250px;
         }
 
-        /* Панель переключения серий */
+        /* Горизонтальная лента серий */
         .series-panel {
             width: 100%; max-width: 950px; background: #171026;
             border: 1px solid #332252; padding: 15px; border-radius: 18px;
@@ -76,11 +76,15 @@
             margin-bottom: 12px; font-weight: bold; color: #c77dff; flex-wrap: wrap; gap: 10px;
         }
         .series-grid {
-            display: flex; gap: 8px; flex-wrap: wrap; max-height: 120px; overflow-y: auto;
+            display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden;
+            padding: 6px 2px; white-space: nowrap; -webkit-overflow-scrolling: touch;
         }
+        .series-grid::-webkit-scrollbar { height: 6px; }
+        .series-grid::-webkit-scrollbar-thumb { background: #3d2b63; border-radius: 10px; }
+        
         .btn-ep {
-            padding: 8px 14px; background: #0f0a1c; border: 1px solid #3d2b63;
-            color: #e2dbf8; border-radius: 10px; cursor: pointer; font-size: 13px; font-weight: bold;
+            flex: 0 0 auto; padding: 10px 16px; background: #0f0a1c; border: 1px solid #3d2b63;
+            color: #e2dbf8; border-radius: 12px; cursor: pointer; font-size: 13px; font-weight: bold;
             transition: 0.2s;
         }
         .btn-ep:hover { border-color: #9d4edd; color: #c77dff; }
@@ -118,7 +122,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=3.0.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=3.2.0"></script>
 </head>
 <body>
 
@@ -135,7 +139,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v3.0 Series Engine</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v3.2 Omnivorous</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -144,7 +148,7 @@
 
     <div class="owner-panel" id="ownerPanel">
         <div style="display: flex; gap: 10px; width: 100%; flex-wrap: wrap;">
-            <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка на Kinovibe (например: kinovibe.cc/36738-radar...)">
+            <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка Kinovibe (Сериал, Аниме или Фильм)">
         </div>
         <div class="controls-row">
             <button class="btn btn-owner" style="width: auto; padding: 0 15px;" onclick="loadIframe()">🌐 Открыть сайт</button>
@@ -152,7 +156,7 @@
         </div>
     </div>
 
-    <!-- Удобная Панель Выбора Серий -->
+    <!-- Горизонтальная Лента Серий -->
     <div class="series-panel" id="seriesPanel">
         <div class="series-header">
             <span id="currentEpTitle">🎬 Найдено серий: 0</span>
@@ -179,7 +183,7 @@
     </div>
 
     <script>
-        const VERSION = "3.0.0";
+        const VERSION = "3.2.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -229,7 +233,7 @@
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v3.0';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v3.2';
         });
 
         socket.on('auth_result', (data) => {
@@ -288,7 +292,6 @@
             }
         }
 
-        // Отрисовка кнопок серий
         function renderPlaylist(playlist, activeIndex = 0) {
             currentPlaylist = playlist;
             currentEpIndex = activeIndex;
@@ -300,12 +303,12 @@
             panel.style.display = 'block';
             grid.innerHTML = '';
             
-            title.innerText = `🎬 Играет: ${playlist[activeIndex].title} (из ${playlist.length})`;
+            title.innerText = `🎬 Играет: ${playlist[activeIndex].title} (всего ${playlist.length})`;
 
             playlist.forEach((ep, idx) => {
                 const btn = document.createElement('button');
                 btn.className = `btn-ep ${idx === activeIndex ? 'active' : ''}`;
-                btn.innerText = ep.title.replace(' Серия', '');
+                btn.innerText = ep.title;
                 btn.onclick = () => selectEpisode(idx);
                 grid.appendChild(btn);
             });
@@ -387,8 +390,8 @@
 
         function extractVideo() {
             const url = document.getElementById('targetUrl').value.trim();
-            if (!url) return alert('Вставь ссылку на страницу сериала!');
-            addLog('INFO', 'Запуск авто-сканера серий v3.0...', url);
+            if (!url) return alert('Вставь ссылку на страницу!');
+            addLog('INFO', 'Всеядный парсер v3.2 сканирует тайтл...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
