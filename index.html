@@ -3,22 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v2.7 Debug</title>
+    <title>Shark Cinema 🦈 v2.4</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
             background: #0b0713; color: #e2dbf8; 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
             display: flex; flex-direction: column; align-items: center; 
-            min-height: 100vh; padding: 15px; padding-bottom: 180px; 
+            min-height: 100vh; padding: 15px; padding-bottom: 80px; 
         }
 
+        /* Живой баннер сырых ошибок */
         .error-toast { 
             position: fixed; top: 10px; left: 50%; transform: translateX(-50%); 
             width: 90%; max-width: 800px; background: #ff4757; color: white; 
             padding: 14px 20px; border-radius: 14px; font-size: 13px; font-family: monospace; 
             box-shadow: 0 10px 30px rgba(255, 71, 87, 0.5); z-index: 9999; display: none; 
-            word-break: break-all;
+            word-break: break-all; border: 1px solid #ff6b81;
         }
 
         .modal-overlay { 
@@ -41,7 +42,7 @@
         .btn { width: 100%; padding: 14px; border-radius: 14px; border: none; font-weight: bold; font-size: 15px; cursor: pointer; }
         .btn-owner { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: white; margin-bottom: 12px; }
         .btn-guest { background: transparent; color: #9d8ec4; border: 1px solid #332252; }
-
+        
         .header { width: 100%; max-width: 950px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
         .header h2 { font-size: 22px; color: #e2dbf8; }
         .status-group { display: flex; gap: 8px; align-items: center; }
@@ -54,38 +55,49 @@
         .owner-panel { 
             width: 100%; max-width: 950px; background: #171026; 
             border: 1px solid #332252; padding: 15px; border-radius: 18px; 
-            margin-bottom: 15px; display: none; text-align: center;
+            margin-bottom: 15px; display: none; box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+        }
+        .url-input-group { display: flex; gap: 10px; }
+        .url-input { 
+            flex: 1; padding: 12px 16px; border-radius: 12px; 
+            border: 1px solid #3d2b63; background: #0f0a1c; color: white; 
+            font-size: 14px; outline: none; 
         }
 
-        .view-mode { width: 100%; max-width: 950px; }
-        .catalog-container { height: 600px; position: relative; background: #000; border-radius: 20px; overflow: hidden; border: 1px solid #2e1f47; }
+        .player-container { 
+            width: 100%; max-width: 950px; height: 600px; 
+            position: relative; background: #000; border-radius: 20px; 
+            overflow: hidden; border: 1px solid #2e1f47; 
+            box-shadow: 0 12px 40px rgba(123, 44, 191, 0.25); 
+        }
         iframe { width: 100%; height: 100%; border: none; }
         .guest-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; background: transparent; }
 
-        .cinema-container { display: none; position: relative; background: #000; border-radius: 20px; overflow: hidden; border: 1px solid #2e1f47; }
-        video { width: 100%; display: block; }
-        .countdown-overlay { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(11, 7, 19, 0.9); z-index: 200; display: none; 
-            flex-direction: column; justify-content: center; align-items: center; 
+        /* Панель живых логов внизу экрана */
+        .log-console-bar {
+            position: fixed; bottom: 0; left: 0; width: 100%; background: #120e24; 
+            border-top: 1px solid #332252; z-index: 8000; font-family: monospace; font-size: 11px;
         }
-        .countdown-number { font-size: 80px; font-weight: bold; color: #c77dff; text-shadow: 0 0 20px rgba(199, 125, 255, 0.6); }
-
-        .log-console-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #120e24; border-top: 1px solid #332252; z-index: 8000; font-family: monospace; font-size: 11px; }
-        .log-header { padding: 10px 15px; background: #1a1433; display: flex; justify-content: space-between; align-items: center; cursor: pointer; color: #c77dff; font-weight: bold; }
-        .log-content { max-height: 150px; overflow-y: auto; padding: 10px 15px; display: block; background: #0a0714; }
+        .log-header {
+            padding: 10px 15px; background: #1a1433; display: flex; justify-content: space-between; 
+            align-items: center; cursor: pointer; color: #c77dff; font-weight: bold;
+        }
+        .log-content {
+            max-height: 150px; overflow-y: auto; padding: 10px 15px; display: none; background: #0a0714;
+        }
         .log-line { margin-bottom: 4px; border-bottom: 1px solid #1a1433; padding-bottom: 2px; word-break: break-all; }
         .log-info { color: #4895ef; }
         .log-success { color: #2ed573; }
         .log-warn { color: #ffa502; }
         .log-error { color: #ff4757; font-weight: bold; }
 
-        @media (max-width: 600px) { .catalog-container { height: 400px; } }
+        @media (max-width: 600px) { .player-container { height: 400px; } }
     </style>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=2.7.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=2.4.0"></script>
 </head>
 <body>
 
+    <!-- Живая плашка ошибок -->
     <div class="error-toast" id="errorToast" onclick="this.style.display='none'"></div>
 
     <div class="modal-overlay" id="authModal">
@@ -99,79 +111,86 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v2.7 Debug</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v2.4 Debug</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Режим: Зритель</span>
         </div>
     </div>
 
-    <!-- КНОПКА ЗАПУСКА ДЛЯ ОВНЕРА (БЕЗ ВВОДА ССЫЛОК!) -->
     <div class="owner-panel" id="ownerPanel">
-        <button class="btn btn-owner" id="startBtn" style="margin-bottom:0;" onclick="startCurrentMovie()">🚀 ЗАПУСТИТЬ ОТКРЫТЫЙ СЕРИАЛ ДЛЯ ДВОИХ</button>
-    </div>
-
-    <div class="view-mode" id="catalogMode">
-        <div class="catalog-container">
-            <div class="guest-overlay" id="guestOverlay"></div>
-            <iframe id="proxyIframe" src="https://agile-enrich-grumpily.ngrok-free.dev/proxy?url=https://kinovibe.cc/"></iframe>
+        <div class="url-input-group">
+            <input type="text" id="kinovibeUrl" class="url-input" placeholder="Вставишь ссылку на страницу Kinovibe...">
+            <button class="btn btn-owner" style="width: auto; padding: 0 22px; margin-bottom: 0;" onclick="syncKinovibePage()">Синхронизировать</button>
         </div>
     </div>
 
-    <div class="view-mode" id="cinemaMode" style="display: none;">
-        <div class="cinema-container" id="cinemaBox" style="display: block;">
-            <div class="countdown-overlay" id="countdownOverlay">
-                <p style="color: #9d8ec4; font-size: 18px; margin-bottom: 10px;">Синхронный старт через:</p>
-                <div class="countdown-number" id="countdownNum">5</div>
-            </div>
-            <video id="cinemaPlayer" controls playsinline></video>
-        </div>
-        <div style="margin-top: 15px;">
-            <button class="btn btn-guest" style="width: auto; padding: 10px 20px;" onclick="exitCinema()">⬅ Вернуться в каталог Kinovibe</button>
-        </div>
+    <div class="player-container">
+        <div class="guest-overlay" id="guestOverlay"></div>
+        <iframe id="mainIframe" src="https://kinovibe.cc/" allowfullscreen allow="autoplay; encrypted-media"></iframe>
     </div>
 
-    <!-- Панель Логов -->
+    <!-- Живая консоль логов -->
     <div class="log-console-bar">
         <div class="log-header" onclick="toggleLogs()">
             <span>🐞 Живой Лог Ошибок <span id="logCount">(0)</span></span>
-            <span id="toggleText">▼ Скрыть логи</span>
+            <span id="toggleText">▲ Показать логи</span>
         </div>
         <div class="log-content" id="logContent"></div>
     </div>
 
     <script>
-        const VERSION = "2.7.0";
+        const VERSION = "2.4.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
+        // Система Живого Логирования
         function addLog(type, msg, details = '') {
             logCounter++;
             document.getElementById('logCount').innerText = `(${logCounter})`;
             const consoleBox = document.getElementById('logContent');
             const time = new Date().toLocaleTimeString();
+            
             const line = document.createElement('div');
             line.className = `log-line log-${type.toLowerCase()}`;
             line.innerHTML = `<span>[${time}] [${type}]</span> ${msg} <small style="color:#777">${details}</small>`;
             consoleBox.appendChild(line);
             consoleBox.scrollTop = consoleBox.scrollHeight;
-            if (type === 'ERROR') { showRawError(`[${type}] ${msg} ${details}`); }
+
+            if (type === 'ERROR') {
+                showRawError(`[${type}] ${msg} ${details}`);
+            }
         }
 
         function showRawError(text) {
             const toast = document.getElementById('errorToast');
-            toast.innerText = text; toast.style.display = 'block';
+            toast.innerText = text;
+            toast.style.display = 'block';
         }
 
         function toggleLogs() {
             const content = document.getElementById('logContent');
             const toggleText = document.getElementById('toggleText');
             if (content.style.display === 'block') {
-                content.style.display = 'none'; toggleText.innerText = '▲ Показать логи';
+                content.style.display = 'none';
+                toggleText.innerText = '▲ Показать логи';
             } else {
-                content.style.display = 'block'; toggleText.innerText = '▼ Скрыть логи';
+                content.style.display = 'block';
+                toggleText.innerText = '▼ Скрыть логи';
             }
         }
+
+        // Перехват всех сырых ошибок браузера
+        window.onerror = function(msg, url, line, col, error) {
+            addLog('ERROR', `JS Error: ${msg}`, `File: ${url}:${line}:${col}`);
+            return false;
+        };
+
+        window.addEventListener('unhandledrejection', function(e) {
+            addLog('ERROR', `Promise Rejection: ${e.reason}`);
+        });
+
+        addLog('INFO', 'Запуск клиентов v2.4. Цель:', SERVER_URL);
 
         const socket = io(SERVER_URL, {
             transports: ['websocket'],
@@ -180,24 +199,25 @@
             timeout: 5000
         });
 
-        const catalogMode = document.getElementById('catalogMode');
-        const cinemaMode = document.getElementById('cinemaMode');
-        const cinemaPlayer = document.getElementById('cinemaPlayer');
-        const countdownOverlay = document.getElementById('countdownOverlay');
-        const countdownNum = document.getElementById('countdownNum');
-        
+        const iframe = document.getElementById('mainIframe');
         let isOwner = false;
-        let ignoreNextSync = false;
 
         socket.on('connect', () => {
-            addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН v2.7!');
+            addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!', `ID: ${socket.id} | Transport: ${socket.io.engine.transport.name}`);
             const serverBadge = document.getElementById('serverBadge');
             serverBadge.className = 'badge badge-online';
-            serverBadge.innerText = '🟢 На связи (v2.7)';
+            serverBadge.innerText = '🟢 На связи (v2.4)';
+        });
+
+        socket.on('connect_error', (err) => {
+            addLog('ERROR', 'Ошибка подключения WebSocket!', `Msg: ${err.message} | Server: ${SERVER_URL}`);
+            const serverBadge = document.getElementById('serverBadge');
+            serverBadge.className = 'badge badge-offline';
+            serverBadge.innerText = '🔴 Ошибка связи';
         });
 
         socket.on('disconnect', (reason) => {
-            addLog('WARN', 'WebSocket отключен:', reason);
+            addLog('WARN', 'WebSocket ОТКЛЮЧЕН!', `Причина: ${reason}`);
             const serverBadge = document.getElementById('serverBadge');
             serverBadge.className = 'badge badge-offline';
             serverBadge.innerText = '🔴 Офлайн';
@@ -208,117 +228,64 @@
             document.getElementById('loginBtn').disabled = false;
 
             if (data.success) {
-                isOwner = true;
-                addLog('SUCCESS', 'Авторизован как Owner');
+                addLog('SUCCESS', 'Овнер успешно авторизован!');
                 document.getElementById('authModal').style.display = 'none';
                 document.getElementById('ownerPanel').style.display = 'block';
                 document.getElementById('roleBadge').className = 'badge badge-owner';
                 document.getElementById('roleBadge').innerText = 'Режим: Owner 👑';
             } else {
-                addLog('ERROR', 'Ошибка авторизации!', data.message);
+                addLog('ERROR', 'Отказ авторизации!', data.message || 'Неверный ПИН');
             }
         });
 
-        socket.on('parse_error', (data) => {
-            document.getElementById('startBtn').innerText = "🚀 ЗАПУСТИТЬ ОТКРЫТЫЙ СЕРИАЛ ДЛЯ ДВОИХ";
-            document.getElementById('startBtn').disabled = false;
-            addLog('ERROR', 'Ошибка сервера при поиске видео:', data.message);
-        });
-
-        socket.on('cinema_start', (data) => {
-            addLog('SUCCESS', 'ВИДЕО ИЗВЛЕЧЕНО! Запуск кинотеатра:', data.url);
-            document.getElementById('startBtn').innerText = "🚀 ЗАПУСТИТЬ ОТКРЫТЫЙ СЕРИАЛ ДЛЯ ДВОИХ";
-            document.getElementById('startBtn').disabled = false;
-
-            catalogMode.style.display = 'none';
-            cinemaMode.style.display = 'block';
-            cinemaPlayer.src = data.url;
-            
-            countdownOverlay.style.display = 'flex';
-            let count = 5;
-            countdownNum.innerText = count;
-
-            let interval = setInterval(() => {
-                count--;
-                if (count > 0) {
-                    countdownNum.innerText = count;
-                } else {
-                    clearInterval(interval);
-                    countdownOverlay.style.display = 'none';
-                    cinemaPlayer.play();
-                }
-            }, 1000);
-        });
-
-        socket.on('cinema_exit', () => {
-            cinemaPlayer.pause();
-            cinemaPlayer.src = "";
-            cinemaMode.style.display = 'none';
-            catalogMode.style.display = 'block';
+        socket.on('room_state', (state) => {
+            addLog('INFO', 'Получено состояние комнаты:', JSON.stringify(state));
+            if (!isOwner && state.current_url && iframe.src !== state.current_url) {
+                iframe.src = state.current_url;
+            }
         });
 
         socket.on('sync_event', (data) => {
-            ignoreNextSync = true;
-            if (data.action === 'play') {
-                if (Math.abs(cinemaPlayer.currentTime - data.time) > 1) {
-                    cinemaPlayer.currentTime = data.time;
-                }
-                cinemaPlayer.play();
-            } else if (data.action === 'pause') {
-                cinemaPlayer.currentTime = data.time;
-                cinemaPlayer.pause();
-            } else if (data.action === 'seek') {
-                cinemaPlayer.currentTime = data.time;
-            }
-            setTimeout(() => { ignoreNextSync = false; }, 300);
-        });
-
-        function startCurrentMovie() {
-            addLog('INFO', 'Овнер запрашивает авто-запуск открытой страницы...');
-            document.getElementById('startBtn').innerText = "⏳ Сервер ищет видео...";
-            document.getElementById('startBtn').disabled = true;
-            
-            // Сервер ВСЁ сделает сам по последней открытой странице!
-            socket.emit('sync_action', { action: 'start_current' });
-        }
-
-        cinemaPlayer.addEventListener('play', () => {
-            if (isOwner && !ignoreNextSync) {
-                socket.emit('sync_action', { action: 'play', time: cinemaPlayer.currentTime });
+            addLog('INFO', 'Событие синхронизации от сервера:', JSON.stringify(data));
+            if (data.action === 'load') {
+                iframe.src = data.url;
             }
         });
-
-        cinemaPlayer.addEventListener('pause', () => {
-            if (isOwner && !ignoreNextSync) {
-                socket.emit('sync_action', { action: 'pause', time: cinemaPlayer.currentTime });
-            }
-        });
-
-        cinemaPlayer.addEventListener('seeked', () => {
-            if (isOwner && !ignoreNextSync) {
-                socket.emit('sync_action', { action: 'seek', time: cinemaPlayer.currentTime });
-            }
-        });
-
-        function exitCinema() {
-            if (isOwner) {
-                socket.emit('sync_action', { action: 'exit_cinema' });
-            }
-        }
 
         function loginOwner() {
             const pinInput = document.getElementById('pinInput').value.trim();
-            if (!pinInput) return alert('Введи 8-значный ПИН!');
-            document.getElementById('loginBtn').innerText = "Проверка...";
+            if (!pinInput) {
+                addLog('WARN', 'Попытка входа с пустым ПИНом');
+                return alert('Введи 8-значный ПИН!');
+            }
+
+            addLog('INFO', 'Отправка ПИНа на сервер...', `Длина: ${pinInput.length} символов`);
+            document.getElementById('loginBtn').innerText = "Проверка ПИНа...";
             document.getElementById('loginBtn').disabled = true;
-            socket.emit('auth_owner', { pin: pinInput });
+
+            if (!socket.connected) {
+                addLog('ERROR', 'Попытка отправки ПИНа без активного WebSocket соединения!');
+                document.getElementById('loginBtn').innerText = "Войти как Owner";
+                document.getElementById('loginBtn').disabled = false;
+            } else {
+                socket.emit('auth_owner', { pin: pinInput });
+            }
         }
 
         function loginGuest() {
+            addLog('INFO', 'Вход в режиме Зрителя');
             document.getElementById('authModal').style.display = 'none';
             document.getElementById('roleBadge').className = 'badge badge-guest';
             document.getElementById('roleBadge').innerText = 'Режим: Зритель 👁️';
             document.getElementById('guestOverlay').style.display = 'block';
+        }
+
+        function syncKinovibePage() {
+            const url = document.getElementById('kinovibeUrl').value.trim();
+            if (!url) return alert('Вставишь ссылку!');
+            addLog('INFO', 'Овнер меняет URL комнаты на:', url);
+            iframe.src = url;
+            socket.emit('sync_action', { action: 'load', url: url });
         }
     </script>
 </body>
