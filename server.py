@@ -79,7 +79,6 @@ def load_state_from_disk():
 load_state_from_disk()
 kv_cookies = load_cookies_from_disk()
 
-# Извлечение чистого названия фильма/сериала из HTML
 def extract_clean_title(html):
     m = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.IGNORECASE | re.DOTALL)
     if not m:
@@ -200,8 +199,10 @@ async def auth_owner(sid, data):
     pin = str(data.get("pin", "")).strip()
     if pin == OWNER_PIN:
         room_state["owner_sid"] = sid
+        print(f"[👑] Owner authenticated: {sid}")
         await sio.emit('auth_result', {'success': True}, to=sid)
     else:
+        print(f"[❌] Owner auth failed: '{pin}' vs '{OWNER_PIN}'")
         await sio.emit('auth_result', {'success': False}, to=sid)
 
 @sio.event
@@ -293,7 +294,7 @@ async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Visual Polish v6.0 сканирует...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Instant Auth v6.1 сканирует...', 'details': url}, to=sid)
 
     try:
         headers = {
@@ -305,7 +306,6 @@ async def extract_magic(sid, data):
             async with session.get(url, timeout=12) as resp:
                 html = await resp.text()
                 
-                # Вытаскиваем заглавное название тайтла
                 media_title = extract_clean_title(html)
                 room_state["media_title"] = media_title
                 
