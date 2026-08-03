@@ -15,25 +15,24 @@ room_state = {
     "owner_sid": None,
     "mode": "iframe",
     "current_url": "https://kinovibe.cc/",
+    "playlist": [],
+    "current_ep_index": 0,
     "connected_count": 0
 }
 
-# --- ВИДЕО-ТУННЕЛЬ / ПРОКСИ (Обход 403 и CORS) ---
+# --- ВИДЕО ТУННЕЛЬ С ПОДДЕРЖКОЙ ПЕРЕМОТКИ ---
 async def proxy_video(request):
     target_url = request.query.get("url")
-    if not target_url:
-        return web.Response(status=400, text="Missing url param")
+    if not target_url: return web.Response(status=400, text="Missing url")
 
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Referer": "https://kinovibe.cc/",
         "Origin": "https://kinovibe.cc"
     }
 
-    # Пробрасываем заголовок перемотки (Range)
     range_header = request.headers.get("Range")
-    if range_header:
-        headers["Range"] = range_header
+    if range_header: headers["Range"] = range_header
 
     try:
         async with ClientSession() as session:
@@ -48,9 +47,7 @@ async def proxy_video(request):
                         "Content-Range": resp.headers.get("Content-Range", "")
                     }
                 )
-                # Удаляем пустые заголовки
                 proxy_resp.headers = {k: v for k, v in proxy_resp.headers.items() if v}
-                
                 await proxy_resp.prepare(request)
                 
                 async for chunk in resp.content.iter_chunked(64 * 1024):
@@ -59,31 +56,42 @@ async def proxy_video(request):
                 await proxy_resp.write_eof()
                 return proxy_resp
     except Exception as e:
-        print(f"[❌] Proxy error: {e}")
         return web.Response(status=500, text=str(e))
 
-# Регистрируем роут прокси в aiohttp
 app.router.add_get('/proxy_video', proxy_video)
 
-def parse_kvb_stream(html):
+# --- АВТОМАТИЧЕСКИЙ СБОРЩИК ВСЕХ СЕРИЙ С КИНОВАЙБА ---
+def parse_kinovibe_playlist(html):
+    playlist = []
+    
+    # 1. Находим все ссылки на mp4/m3u8 на странице
     raw_urls = re.findall(r'https?://[^\s"\'<>]+(?:\.mp4|\.m3u8)[^\s"\'<>]*', html)
-    full_movies = [u for u in raw_urls if "/trailer/" not in u and "trailer" not in u.lower()]
-    if full_movies:
-        return full_movies[0]
+    clean_urls = [u for u in raw_urls if "/trailer/" not in u and "trailer" not in u.lower()]
 
-    b64_matches = re.findall(r'file\s*:\s*["\']([^"\'\s]+)["\']', html)
-    for b64_str in b64_matches:
-        cleaned_b64 = re.sub(r'^#[0-9]', '', b64_str)
-        try:
-            decoded = base64.b64decode(cleaned_b64).decode('utf-8', errors='ignore')
-            decoded_urls = re.findall(r'https?://[^\s"\'<>]+(?:\.mp4|\.m3u8)[^\s"\'<>]*', decoded)
-            valid_movies = [u for u in decoded_urls if "/trailer/" not in u and "trailer" not in u.lower()]
-            if valid_movies:
-                return valid_movies[0]
-        except Exception:
-            pass
-            
-    return None
+    episodes_dict = {}
+    
+    for url in clean_urls:
+        # Ищем номер серии из URL (например s01e03 или s01e3 или e03)
+        match = re.search(r's\d+e(\d+)', url, re.IGNORECASE)
+        if match:
+            ep_num = int(match.group(1))
+            if ep_num not in episodes_dict:
+                episodes_dict[ep_num] = {"title": f"{ep_num} Серия", "url": url}
+            # Если есть выбор качества, берем 720p предпочтительнее 480p
+            if "720" in url:
+                episodes_dict[ep_num]["url"] = url
+
+    if episodes_dict:
+        for ep_num in sorted(episodes_dict.keys()):
+            playlist.append(episodes_dict[ep_num])
+        return playlist
+
+    # 2. Фолбэк: если это фильм (одна серия)
+    unique_urls = list(dict.fromkeys(clean_urls))
+    for idx, url in enumerate(unique_urls, 1):
+        playlist.append({"title": f"Фильм / Часть {idx}", "url": url})
+
+    return playlist
 
 @sio.event
 async def connect(sid, environ):
@@ -93,8 +101,7 @@ async def connect(sid, environ):
 @sio.event
 async def disconnect(sid):
     room_state["connected_count"] = max(0, room_state["connected_count"] - 1)
-    if room_state["owner_sid"] == sid:
-        room_state["owner_sid"] = None
+    if room_state["owner_sid"] == sid: room_state["owner_sid"] = None
 
 @sio.event
 async def auth_owner(sid, data):
@@ -117,20 +124,37 @@ async def player_action(sid, data):
         room_state["current_url"] = data.get("url")
     await sio.emit('player_command', data, skip_sid=sid)
 
+# Переключение серий Овнером
+@sio.event
+async def switch_episode(sid, data):
+    if sid != room_state["owner_sid"]: return
+    
+    idx = data.get("index", 0)
+    if 0 <= idx < len(room_state["playlist"]):
+        room_state["current_ep_index"] = idx
+        ep = room_state["playlist"][idx]
+        room_state["mode"] = "video"
+        room_state["current_url"] = ep["url"]
+        
+        print(f"[🎬] Switching to Episode {idx+1}: {ep['url']}")
+        
+        # Обновляем состояние у ВСЕХ
+        await sio.emit('player_command', {
+            'action': 'update_playlist', 
+            'playlist': room_state["playlist"], 
+            'currentIndex': idx
+        })
+        await sio.emit('player_command', {
+            'action': 'load_video', 
+            'url': ep["url"]
+        })
+
 @sio.event
 async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
-        
     url = data.get("url", "").strip()
     
-    if ".mp4" in url or ".m3u8" in url or "kvb.cool" in url:
-        await sio.emit('server_log', {'type': 'SUCCESS', 'msg': 'Прямое видео отправлено через Прокси-Туннель!', 'details': url}, to=sid)
-        room_state["mode"] = "video"
-        room_state["current_url"] = url
-        await sio.emit('player_command', {'action': 'load_video', 'url': url})
-        return
-
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Сканирование страницы...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Парсинг страницы сериала v3.0...', 'details': url}, to=sid)
 
     try:
         headers = {
@@ -140,19 +164,32 @@ async def extract_magic(sid, data):
         async with ClientSession(headers=headers) as session:
             async with session.get(url, timeout=12) as resp:
                 html = await resp.text()
-                found_video = parse_kvb_stream(html)
+                playlist = parse_kinovibe_playlist(html)
                 
-                if found_video:
+                if playlist:
+                    room_state["playlist"] = playlist
+                    room_state["current_ep_index"] = 0
                     room_state["mode"] = "video"
-                    room_state["current_url"] = found_video
-                    await sio.emit('player_command', {'action': 'load_video', 'url': found_video})
-                    await sio.emit('server_log', {'type': 'SUCCESS', 'msg': 'Видео найдено и запущен Туннель!', 'details': found_video}, to=sid)
+                    room_state["current_url"] = playlist[0]["url"]
+                    
+                    await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'Успешно собрано серий: {len(playlist)}!', 'details': 'Запускаю Серию 1'}, to=sid)
+                    
+                    # Отправляем плейлист и запускаем первую серию у всех
+                    await sio.emit('player_command', {
+                        'action': 'update_playlist', 
+                        'playlist': playlist, 
+                        'currentIndex': 0
+                    })
+                    await sio.emit('player_command', {
+                        'action': 'load_video', 
+                        'url': playlist[0]["url"]
+                    })
                     return
                             
-                await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Видео не найдено', 'details': 'Вставь прямую ссылку из DOM в поле.'}, to=sid)
+                await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Серии не найдены', 'details': 'Проверь ссылку.'}, to=sid)
 
     except Exception as e:
-        await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Ошибка запроса!', 'details': str(e)}, to=sid)
+        await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Ошибка парсера!', 'details': str(e)}, to=sid)
 
 if __name__ == '__main__':
     web.run_app(app, host='0.0.0.0', port=8000)
