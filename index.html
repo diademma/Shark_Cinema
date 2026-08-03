@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v4.2 Universal</title>
+    <title>Shark Cinema 🦈 v5.0 TrueSync</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -43,6 +43,7 @@
         .btn-owner { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: white; margin-bottom: 12px; }
         .btn-guest { background: transparent; color: #9d8ec4; border: 1px solid #332252; }
         .btn-magic { background: linear-gradient(135deg, #ff9f43, #ee5253); color: white; border: none; }
+        .btn-sync { background: linear-gradient(135deg, #2ed573, #1e90ff); color: white; border: none; display: none; }
         
         .header { width: 100%; max-width: 950px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
         .header h2 { font-size: 22px; color: #e2dbf8; }
@@ -101,7 +102,23 @@
         }
         iframe { width: 100%; height: 100%; border: none; }
         video { width: 100%; height: 100%; background: #000; display: none; outline: none; }
-        .guest-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 80%; z-index: 100; display: none; background: transparent; }
+        
+        /* Глухой щит для Гостей */
+        .guest-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 100; display: none; background: transparent; }
+
+        /* Оверлей Синхронного Отсчета */
+        .countdown-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(11, 7, 19, 0.85); backdrop-filter: blur(8px);
+            display: none; justify-content: center; align-items: center;
+            z-index: 500; flex-direction: column;
+        }
+        .countdown-num {
+            font-size: 150px; font-weight: bold; color: #c77dff;
+            text-shadow: 0 0 40px #9d4edd; animation: pulse 1s infinite;
+        }
+        .countdown-text { font-size: 20px; color: #e2dbf8; margin-top: 10px; font-weight: bold; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
 
         .log-console-bar {
             position: fixed; bottom: 0; left: 0; width: 100%; background: #120e24; 
@@ -118,10 +135,10 @@
         .log-warn { color: #ffa502; }
         .log-error { color: #ff4757; font-weight: bold; }
 
-        @media (max-width: 600px) { .player-container { height: 400px; } }
+        @media (max-width: 600px) { .player-container { height: 400px; } .countdown-num { font-size: 100px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=4.2.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=5.0.0"></script>
 </head>
 <body>
 
@@ -138,7 +155,7 @@
     </div>
 
     <div class="header">
-        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v4.2 Universal</small></h2>
+        <h2>Shark Cinema <small style="font-size: 12px; color: #9d8ec4;">v5.0 TrueSync</small></h2>
         <div class="status-group">
             <span id="serverBadge" class="badge badge-offline">🔴 Подключение...</span>
             <span id="roleBadge" class="badge badge-guest">Зритель</span>
@@ -151,7 +168,8 @@
         </div>
         <div class="controls-row">
             <button class="btn btn-owner" style="width: auto; padding: 0 15px;" onclick="loadIframe()">🌐 Открыть сайт</button>
-            <button class="btn btn-magic" style="width: auto; padding: 0 15px;" onclick="extractVideo()">🚀 Открыть в Плеере (SyncPlay)</button>
+            <button class="btn btn-magic" style="width: auto; padding: 0 15px;" onclick="extractVideo()">🚀 Извлечь серии</button>
+            <button class="btn btn-sync" id="syncStartBtn" style="width: auto; padding: 0 20px;" onclick="startSyncCountdown()">⏱ Синхронный Старт</button>
         </div>
     </div>
 
@@ -167,7 +185,15 @@
     </div>
 
     <div class="player-container">
+        <!-- Абсолютный глухой щит для гостя -->
         <div class="guest-overlay" id="guestOverlay"></div>
+        
+        <!-- Оверлей отсчета 5 сек -->
+        <div class="countdown-overlay" id="countdownOverlay">
+            <div class="countdown-num" id="countdownNum">5</div>
+            <div class="countdown-text">Подготовка синхронного потока...</div>
+        </div>
+
         <iframe id="mainIframe" src="https://kinovibe.cc/" allowfullscreen></iframe>
         <video id="mainVideo" controls playsinline></video>
     </div>
@@ -181,7 +207,7 @@
     </div>
 
     <script>
-        const VERSION = "4.2.0";
+        const VERSION = "5.0.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
 
@@ -206,13 +232,9 @@
 
         function toggleLogs() {
             const content = document.getElementById('logContent');
-            const toggleText = document.getElementById('toggleText');
             content.style.display = content.style.display === 'block' ? 'none' : 'block';
-            toggleText.innerText = content.style.display === 'block' ? '▼ Скрыть логи' : '▲ Показать логи';
+            document.getElementById('toggleText').innerText = content.style.display === 'block' ? '▼ Скрыть логи' : '▲ Показать логи';
         }
-
-        window.onerror = (msg, url, line, col, error) => { addLog('ERROR', `JS: ${msg}`, `${url}:${line}`); return false; };
-        window.addEventListener('unhandledrejection', (e) => addLog('ERROR', `Promise: ${e.reason}`));
 
         const socket = io(SERVER_URL, {
             transports: ['websocket'],
@@ -231,7 +253,7 @@
         socket.on('connect', () => {
             addLog('SUCCESS', 'WebSocket ПОДКЛЮЧЕН!');
             document.getElementById('serverBadge').className = 'badge badge-online';
-            document.getElementById('serverBadge').innerText = '🟢 На связи v4.2';
+            document.getElementById('serverBadge').innerText = '🟢 На связи v5.0';
         });
 
         socket.on('auth_result', (data) => {
@@ -245,10 +267,9 @@
             }
         });
 
-        socket.on('server_log', (data) => {
-            addLog(data.type, data.msg, data.details);
-        });
+        socket.on('server_log', (data) => { addLog(data.type, data.msg, data.details); });
 
+        // === ИНИЦИАЛИЗАЦИЯ И ПОЗДНИЙ ВХОД ===
         socket.on('room_state', (state) => {
             addLog('INFO', 'Состояние комнаты:', state.mode);
             if (state.playlist && state.playlist.length > 0) {
@@ -258,7 +279,13 @@
                 iframe.src = state.current_url;
                 switchToIframe();
             } else if (state.mode === 'video' && state.current_url) {
-                loadRawVideo(state.current_url);
+                loadRawVideo(state.current_url, false); // Загружаем на паузе
+                
+                // Если я Зритель, прошу у Овнера точное время
+                if (!isOwner) {
+                    addLog('INFO', 'Запрос актуального таймлайна у Овнера...');
+                    socket.emit('guest_ready_sync');
+                }
             }
         });
 
@@ -267,86 +294,118 @@
             iframe.style.display = 'block';
             if (hlsPlayer) hlsPlayer.destroy();
             video.pause();
+            document.getElementById('syncStartBtn').style.display = 'none';
         }
 
-        function loadRawVideo(rawUrl) {
-            addLog('SUCCESS', 'Запуск прямого CDN потока:', rawUrl);
-            
+        // Загрузка видео теперь всегда на паузе
+        function loadRawVideo(rawUrl, autoStartBtn = true) {
+            addLog('SUCCESS', 'Загрузка потока...', rawUrl);
             iframe.style.display = 'none';
             video.style.display = 'block';
+            video.pause();
+            video.currentTime = 0;
+            
+            if (isOwner && autoStartBtn) {
+                document.getElementById('syncStartBtn').style.display = 'inline-block';
+            }
             
             if (Hls.isSupported() && rawUrl.includes('.m3u8')) {
                 if (hlsPlayer) hlsPlayer.destroy();
                 hlsPlayer = new Hls();
                 hlsPlayer.loadSource(rawUrl);
                 hlsPlayer.attachMedia(video);
-                hlsPlayer.on(Hls.Events.MANIFEST_PARSED, () => {
-                    video.play().catch(e => addLog('WARN', 'Кликни по экрану для воспроизведения'));
-                });
             } else {
                 video.src = rawUrl;
-                video.play().catch(e => addLog('WARN', 'Кликни по экрану для воспроизведения'));
             }
         }
 
-        function renderPlaylist(playlist, activeIndex = 0) {
-            currentPlaylist = playlist;
-            currentEpIndex = activeIndex;
-            
-            const panel = document.getElementById('seriesPanel');
-            const grid = document.getElementById('seriesGrid');
-            const title = document.getElementById('currentEpTitle');
-            
-            panel.style.display = 'block';
-            grid.innerHTML = '';
-            
-            title.innerText = `🎬 Играет: ${playlist[activeIndex].title} (из ${playlist.length})`;
-
-            playlist.forEach((ep, idx) => {
-                const btn = document.createElement('button');
-                btn.className = `btn-ep ${idx === activeIndex ? 'active' : ''}`;
-                btn.innerText = ep.title;
-                btn.onclick = () => selectEpisode(idx);
-                grid.appendChild(btn);
-            });
-        }
-
-        function selectEpisode(index) {
-            if (!isOwner) return alert('Только Овнер может переключать серии!');
-            socket.emit('switch_episode', { index: index });
-        }
-
-        function switchEpRelative(dir) {
-            if (!isOwner) return alert('Только Овнер может переключать серии!');
-            const newIndex = currentEpIndex + dir;
-            if (newIndex >= 0 && newIndex < currentPlaylist.length) {
-                selectEpisode(newIndex);
+        // === СИСТЕМА LATE JOINER SYNC (Умный вход гостя) ===
+        socket.on('request_owner_time', (data) => {
+            if (isOwner) {
+                // Сервер просит овнера сказать, где он сейчас
+                socket.emit('owner_time_response', {
+                    guest_sid: data.guest_sid,
+                    time: video.currentTime,
+                    paused: video.paused
+                });
             }
+        });
+
+        socket.on('apply_sync_late', (data) => {
+            if (!isOwner) {
+                ignoreNextEvent = true;
+                // Компенсация задержки интернета: +1 секунда, если видео идет
+                const targetTime = data.time + (data.paused ? 0 : 1.0);
+                video.currentTime = targetTime;
+                
+                if (!data.paused) {
+                    video.play().catch(e => addLog('ERROR', 'Автоплей блочит браузер. Нажми на экран.'));
+                } else {
+                    video.pause();
+                }
+                addLog('SUCCESS', 'Синхронизация при входе завершена!', `Время: ${targetTime.toFixed(1)}с`);
+            }
+        });
+
+        // === СИСТЕМА СИНХРОННОГО СТАРТА ===
+        function startSyncCountdown() {
+            if (!isOwner) return;
+            document.getElementById('syncStartBtn').style.display = 'none';
+            socket.emit('trigger_countdown');
         }
 
+        socket.on('start_countdown', () => {
+            const overlay = document.getElementById('countdownOverlay');
+            const num = document.getElementById('countdownNum');
+            overlay.style.display = 'flex';
+            
+            let count = 5;
+            num.innerText = count;
+            
+            // Сбрасываем время в 0 перед стартом на всякий случай
+            ignoreNextEvent = true;
+            video.currentTime = 0;
+            video.pause();
+
+            const iv = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    num.innerText = count;
+                } else {
+                    clearInterval(iv);
+                    overlay.style.display = 'none';
+                    ignoreNextEvent = true;
+                    video.play().catch(e => addLog('ERROR', 'Автоплей блочит браузер. Нажми на экран.'));
+                }
+            }, 1000);
+        });
+
+        // === ГЛОБАЛЬНЫЕ КОМАНДЫ УПРАВЛЕНИЯ ПЛЕЕРОМ ===
         socket.on('player_command', (data) => {
             if (data.action === 'load_iframe') {
                 iframe.src = data.url;
                 switchToIframe();
             }
             if (data.action === 'load_video') {
-                loadRawVideo(data.url);
+                loadRawVideo(data.url, true);
             }
             if (data.action === 'update_playlist') {
                 renderPlaylist(data.playlist, data.currentIndex);
             }
             
-            if (isOwner) return; 
+            if (isOwner) return; // Овнер слушает только себя
             
             if (data.action === 'play') {
                 ignoreNextEvent = true;
-                if (Math.abs(video.currentTime - data.time) > 2) video.currentTime = data.time;
+                if (Math.abs(video.currentTime - data.time) > 2.0) video.currentTime = data.time;
                 video.play().catch(e => console.log(e));
             }
             if (data.action === 'pause') {
                 ignoreNextEvent = true;
-                video.currentTime = data.time;
                 video.pause();
+                // ЖЕСТКАЯ ЗАМОРОЗКА (1 в 1)
+                video.currentTime = data.time;
+                addLog('INFO', 'Жесткая заморозка от Овнера', `Время: ${data.time}`);
             }
             if (data.action === 'seek') {
                 ignoreNextEvent = true;
@@ -354,6 +413,7 @@
             }
         });
 
+        // === ИСХОДЯЩИЕ СОБЫТИЯ ОТ ОВНЕРА ===
         video.addEventListener('play', () => {
             if (isOwner && !ignoreNextEvent) socket.emit('player_action', { action: 'play', time: video.currentTime });
             ignoreNextEvent = false;
@@ -367,6 +427,7 @@
             ignoreNextEvent = false;
         });
 
+        // === ОСТАЛЬНАЯ ЛОГИКА (АВТОРИЗАЦИЯ, ИЗВЛЕЧЕНИЕ) ===
         function loginOwner() {
             const pin = document.getElementById('pinInput').value.trim();
             socket.emit('auth_owner', { pin: pin });
@@ -374,7 +435,43 @@
 
         function loginGuest() {
             document.getElementById('authModal').style.display = 'none';
+            // Включаем 100% глухой щит на плеер для Гостя!
             document.getElementById('guestOverlay').style.display = 'block';
+            addLog('INFO', 'Вход зрителя. Интерфейс плеера заблокирован.');
+        }
+
+        function renderPlaylist(playlist, activeIndex = 0) {
+            currentPlaylist = playlist;
+            currentEpIndex = activeIndex;
+            
+            const panel = document.getElementById('seriesPanel');
+            const grid = document.getElementById('seriesGrid');
+            const title = document.getElementById('currentEpTitle');
+            
+            panel.style.display = 'block';
+            grid.innerHTML = '';
+            title.innerText = `🎬 Играет: ${playlist[activeIndex].title} (из ${playlist.length})`;
+
+            playlist.forEach((ep, idx) => {
+                const btn = document.createElement('button');
+                btn.className = `btn-ep ${idx === activeIndex ? 'active' : ''}`;
+                btn.innerText = ep.title;
+                btn.onclick = () => {
+                    if (!isOwner) return alert('Только Овнер!');
+                    document.getElementById('syncStartBtn').style.display = 'none';
+                    socket.emit('switch_episode', { index: idx });
+                };
+                grid.appendChild(btn);
+            });
+        }
+
+        function switchEpRelative(dir) {
+            if (!isOwner) return;
+            const newIndex = currentEpIndex + dir;
+            if (newIndex >= 0 && newIndex < currentPlaylist.length) {
+                document.getElementById('syncStartBtn').style.display = 'none';
+                socket.emit('switch_episode', { index: newIndex });
+            }
         }
 
         function loadIframe() {
@@ -388,7 +485,8 @@
         function extractVideo() {
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку на страницу!');
-            addLog('INFO', 'Запуск Universal Engine v4.2...', url);
+            document.getElementById('syncStartBtn').style.display = 'none';
+            addLog('INFO', 'Запуск TrueSync v5.0...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
