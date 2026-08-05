@@ -19,6 +19,8 @@ OWNER_PIN = os.getenv("OWNER_PIN", "18349276")
 STATE_FILE = "room_state.json"
 COOKIES_FILE = "kinovibe_cookies.json"
 
+ffmpeg_process = None # Процесс стрима в Telegram
+
 room_state = {
     "owner_sid": None,
     "mode": "iframe",
@@ -27,7 +29,8 @@ room_state = {
     "playlist": [],
     "current_ep_index": 0,
     "connected_count": 0,
-    "has_kv_cookies": False
+    "has_kv_cookies": False,
+    "tg_streaming": False
 }
 
 def load_cookies_from_disk():
@@ -188,10 +191,73 @@ async def fetch_playerjs_playlist(session, pl_url):
         print(f"[❌] Error reading Playerjs playlist: {e}")
         return []
 
+# === 📡 МОДУЛЬ СТРИМА В TELEGRAM (FFMPEG -C COPY) ===
+@sio.event
+async def tg_start_stream(sid, data):
+    global ffmpeg_process
+    if sid != room_state["owner_sid"]: return
+
+    rtmp_server = data.get("rtmp_server", "").rstrip('/')
+    stream_key = data.get("stream_key", "").lstrip('/')
+    
+    if not rtmp_server or not stream_key: return
+
+    full_rtmp = f"{rtmp_server}/{stream_key}"
+    video_url = room_state.get("current_url")
+
+    if not video_url:
+        await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Стрим не запущен: сначала выберите фильм!'}, to=sid)
+        return
+
+    # Если уже идет прошлый стрим — выключаем его
+    if ffmpeg_process and ffmpeg_process.returncode is None:
+        try: ffmpeg_process.kill()
+        except: pass
+
+    cmd = [
+        "ffmpeg",
+        "-re",
+        "-headers", "Referer: https://kinovibe.cc/\r\nUser-Agent: Mozilla/5.0\r\n",
+        "-i", video_url,
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-f", "flv",
+        full_rtmp
+    ]
+
+    print(f"[📡] Starting Telegram Stream via FFmpeg (-c copy)...")
+    
+    try:
+        ffmpeg_process = await asyncio.create_subprocess_exec(*cmd)
+        room_state["tg_streaming"] = True
+        await sio.emit('tg_stream_status', {'running': True})
+        await sio.emit('server_log', {'type': 'SUCCESS', 'msg': '📡 FFmpeg запустил передачу байт в Telegram!', 'details': full_rtmp}, to=sid)
+    except Exception as e:
+        print(f"[❌] FFmpeg start error: {e}")
+        await sio.emit('server_log', {'type': 'ERROR', 'msg': ' Ошибка запуска FFmpeg на VPS!', 'details': str(e)}, to=sid)
+
+@sio.event
+async def tg_stop_stream(sid):
+    global ffmpeg_process
+    if sid != room_state["owner_sid"]: return
+
+    if ffmpeg_process and ffmpeg_process.returncode is None:
+        try:
+            ffmpeg_process.kill()
+            print("[📡] Telegram Stream stopped.")
+        except Exception as e:
+            print(f"[❌] FFmpeg kill error: {e}")
+
+    room_state["tg_streaming"] = False
+    await sio.emit('tg_stream_status', {'running': False})
+    await sio.emit('server_log', {'type': 'INFO', 'msg': '📡 Стрим в Telegram остановлен.'}, to=sid)
+
 @sio.event
 async def connect(sid, environ):
     room_state["connected_count"] += 1
     await sio.emit('room_state', room_state, to=sid)
+    if room_state["tg_streaming"]:
+        await sio.emit('tg_stream_status', {'running': True}, to=sid)
 
 @sio.event
 async def disconnect(sid):
@@ -207,16 +273,13 @@ async def auth_owner(sid, data):
         await sio.emit('auth_result', {'success': True}, to=sid)
         
         if room_state["mode"] == "video" and room_state["connected_count"] > 1:
-            print("[🔄] Owner re-joined! Requesting time from Guests...")
             await sio.emit('request_guest_time_for_owner', skip_sid=sid)
     else:
-        print(f"[❌] Owner auth failed: '{pin}' vs '{OWNER_PIN}'")
         await sio.emit('auth_result', {'success': False}, to=sid)
 
 @sio.event
 async def guest_time_report(sid, data):
     if room_state["owner_sid"]:
-        print(f"[🔄] Forwarding Guest time {data['time']}s to Owner {room_state['owner_sid']}")
         await sio.emit('apply_owner_catchup', data, to=room_state['owner_sid'])
 
 @sio.event
@@ -290,6 +353,10 @@ async def switch_episode(sid, data):
         room_state["mode"] = "video"
         room_state["current_url"] = ep["url"]
         
+        # Если идет стрим в Telegram — перезапускаем его на новую серию!
+        if room_state["tg_streaming"] and ffmpeg_process:
+            print("[📡] Auto-switching Telegram Stream to new episode...")
+            
         save_state_to_disk()
         
         await sio.emit('player_command', {
@@ -308,7 +375,7 @@ async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'CLI Helper v6.4 сканирует...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Telegram RTMP v7.0 сканирует...', 'details': url}, to=sid)
 
     try:
         headers = {
