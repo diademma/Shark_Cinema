@@ -26,6 +26,14 @@
             background: rgba(11, 7, 19, 0.95); backdrop-filter: blur(12px); 
             display: flex; justify-content: center; align-items: center; z-index: 1000; 
         }
+        
+        /* Поднятый z-index 9999 для окна команд */
+        .cmd-modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(11, 7, 19, 0.95); backdrop-filter: blur(12px); 
+            display: flex; justify-content: center; align-items: center; z-index: 9999; 
+        }
+
         .modal-box { 
             background: #171026; border: 1px solid #332252; padding: 30px 25px; 
             border-radius: 24px; text-align: center; width: 90%; max-width: 420px; 
@@ -72,7 +80,7 @@
         .badge-offline { background: rgba(255, 71, 87, 0.15); color: #ff4757; border: 1px solid rgba(255, 71, 87, 0.4); }
         .badge-beacon { background: rgba(0, 210, 211, 0.15); color: #00d2d3; border: 1px solid rgba(0, 210, 211, 0.4); display: none; }
 
-        /* Элементы списка команд VPS */
+        /* Элементы команд VPS */
         .cmd-item {
             background: #0f0a1c;
             border: 1px solid #3d2b63;
@@ -201,7 +209,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } .countdown-num { font-size: 100px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=6.4.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=7.1.0"></script>
 </head>
 <body>
 
@@ -221,8 +229,8 @@
         </div>
     </div>
 
-    <!-- Модалка команд Linux для VPS -->
-    <div class="modal-overlay" id="cmdModal" style="display:none;" onclick="if(event.target===this) closeCmdModal()">
+    <!-- Модалка команд Linux (z-index 9999 - ПОВЕРХ ВСЕГО) -->
+    <div class="cmd-modal-overlay" id="cmdModal" style="display:none;" onclick="if(event.target===this) closeCmdModal()">
         <div class="modal-box">
             <h2>💻 Пульт VPS (Команды)</h2>
             <p>Нажми кнопку справа от нужной команды для копирования в 1 клик:</p>
@@ -347,7 +355,7 @@
     </div>
 
     <script>
-        const VERSION = "6.4.0";
+        const VERSION = "7.1.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
         let pendingOwnerPin = localStorage.getItem('shark_owner_pin') || null;
@@ -377,8 +385,12 @@
             document.getElementById('toggleText').innerText = content.style.display === 'block' ? '▼ Скрыть логи' : '▲ Показать логи';
         }
 
-        function openCmdModal() { document.getElementById('cmdModal').style.display = 'flex'; }
-        function closeCmdModal() { document.getElementById('cmdModal').style.display = 'none'; }
+        function openCmdModal() { 
+            document.getElementById('cmdModal').style.display = 'flex'; 
+        }
+        function closeCmdModal() { 
+            document.getElementById('cmdModal').style.display = 'none'; 
+        }
 
         function copyText(text, btnEl) {
             if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -827,7 +839,6 @@
             }
         }
 
-        // Автоматическая загрузка https://kinovibe.cc/ если поле пустое
         function loadIframe() {
             const inputVal = document.getElementById('targetUrl').value.trim();
             const url = inputVal ? inputVal : 'https://kinovibe.cc/';
@@ -840,9 +851,11 @@
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку!');
             document.getElementById('syncStartBtn').style.display = 'none';
-            addLog('INFO', 'Запуск CLI Helper v6.4...', url);
+            addLog('INFO', 'Запуск v7.1 Layer Fix...', url);
             socket.emit('extract_magic', { url: url });
         }
+    </script>
+
     <script src="tg_stream.js"></script>
 </body>
 </html>
