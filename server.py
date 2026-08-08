@@ -4,6 +4,7 @@ import json
 import base64
 import asyncio
 import socketio
+import yt_dlp
 from aiohttp import web, ClientSession
 
 sio = socketio.AsyncServer(
@@ -32,6 +33,20 @@ room_state = {
     "has_kv_cookies": False,
     "tg_streaming": False
 }
+
+# --- YOUTUBE ДЕКОДЕР ПОТОКОВ (yt-dlp) ---
+def extract_youtube_stream(yt_url):
+    ydl_opts = {
+        'format': 'best[ext=mp4]/best',
+        'quiet': True,
+        'no_warnings': True
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(yt_url, download=False)
+        return {
+            'title': info.get('title', 'YouTube Видео'),
+            'url': info.get('url')
+        }
 
 def load_cookies_from_disk():
     if os.path.exists(COOKIES_FILE):
@@ -191,7 +206,7 @@ async def fetch_playerjs_playlist(session, pl_url):
         print(f"[❌] Error reading Playerjs playlist: {e}")
         return []
 
-# === 📡 МОДУЛЬ СТРИМА В TELEGRAM (НОЛЬ ЛОГОВ НА ДИСК - DEVNULL) ===
+# === 📡 МОДУЛЬ СТРИМА В TELEGRAM (FFMPEG -C COPY) ===
 async def monitor_ffmpeg(owner_sid):
     global ffmpeg_process
     if ffmpeg_process:
@@ -240,10 +255,9 @@ async def tg_start_stream(sid, data):
         full_rtmp
     ]
 
-    print(f"[📡] Starting Telegram Stream via FFmpeg (Zero Disk Logs)...")
+    print(f"[📡] Starting Telegram Stream via FFmpeg...")
     
     try:
-        # 🚫 ВЫВОД В DEVNULL (0 БАЙТ НА ДИСКЕ)
         ffmpeg_process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.DEVNULL,
@@ -251,7 +265,7 @@ async def tg_start_stream(sid, data):
         )
         room_state["tg_streaming"] = True
         await sio.emit('tg_stream_status', {'running': True})
-        await sio.emit('server_log', {'type': 'SUCCESS', 'msg': '📡 FFmpeg запустил трансляцию в Telegram (Режим 0 Байт Логов)!', 'details': full_rtmp}, to=sid)
+        await sio.emit('server_log', {'type': 'SUCCESS', 'msg': '📡 FFmpeg запустил трансляцию в Telegram!', 'details': full_rtmp}, to=sid)
         
         asyncio.create_task(monitor_ffmpeg(sid))
     except Exception as e:
@@ -389,13 +403,53 @@ async def switch_episode(sid, data):
             'url': ep["url"]
         })
 
+# === УНИВЕРСАЛЬНЫЙ ИЗВЛЕКАТЕЛЬ МЕДИА (KINOVIBE И YOUTUBE) ===
 @sio.event
 async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'Zero-Disk Logs v7.3 сканирует...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'YouTube & Universal v8.0 сканирует...', 'details': url}, to=sid)
 
+    # 🔴 ОБРАБОТКА YOUTUBE ССЫЛОК (yt-dlp)
+    if "youtube.com" in url or "youtu.be" in url:
+        try:
+            await sio.emit('server_log', {'type': 'INFO', 'msg': 'Запуск yt-dlp для YouTube...'}, to=sid)
+            
+            loop = asyncio.get_event_loop()
+            yt_info = await loop.run_in_executor(None, extract_youtube_stream, url)
+            
+            yt_title = yt_info.get("title", "YouTube Видео")
+            yt_stream_url = yt_info.get("url")
+            
+            if yt_stream_url:
+                yt_playlist = [{"title": "YouTube (Смотреть)", "url": yt_stream_url}]
+                room_state["playlist"] = yt_playlist
+                room_state["current_ep_index"] = 0
+                room_state["mode"] = "video"
+                room_state["current_url"] = yt_stream_url
+                room_state["media_title"] = yt_title
+                
+                save_state_to_disk()
+                
+                await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'YouTube Видео извлечено: {yt_title}'}, to=sid)
+                
+                await sio.emit('player_command', {
+                    'action': 'update_playlist', 
+                    'playlist': yt_playlist, 
+                    'currentIndex': 0,
+                    'media_title': yt_title
+                })
+                await sio.emit('player_command', {
+                    'action': 'load_video', 
+                    'url': yt_stream_url
+                })
+                return
+        except Exception as yt_err:
+            await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Ошибка извлечения YouTube!', 'details': str(yt_err)}, to=sid)
+            return
+
+    # 🌐 ОБРАБОТКА KINOVIBE ССЫЛОК
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
