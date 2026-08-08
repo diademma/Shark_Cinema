@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shark Cinema 🦈 v8.0 YouTube</title>
+    <title>Shark Cinema 🦈 v8.1 YouTube Fix</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -207,7 +207,7 @@
         @media (max-width: 600px) { .player-container { height: 400px; } .countdown-num { font-size: 100px; } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=8.0.0"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js?v=8.1.0"></script>
 </head>
 <body>
 
@@ -278,7 +278,6 @@
 
     <div class="owner-panel" id="ownerPanel">
         <div style="display: flex; gap: 10px; width: 100%; flex-wrap: wrap;">
-            <!-- Ввод ссылок Kinovibe ИЛИ YouTube -->
             <input type="text" id="targetUrl" class="url-input" placeholder="Ссылка Kinovibe ИЛИ YouTube (видео / shorts)">
         </div>
         <div class="controls-row">
@@ -352,7 +351,7 @@
     </div>
 
     <script>
-        const VERSION = "8.0.0";
+        const VERSION = "8.1.0";
         const SERVER_URL = "https://agile-enrich-grumpily.ngrok-free.dev";
         let logCounter = 0;
         let pendingOwnerPin = localStorage.getItem('shark_owner_pin') || null;
@@ -405,6 +404,18 @@
                 btnEl.style.background = "#332252";
                 btnEl.style.color = "#e2dbf8";
             }, 1500);
+        }
+
+        // Вспомогательная функция для преобразовывания ссылок YouTube в рабочие /embed/
+        function formatEmbedUrl(url) {
+            if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+                const match = url.match(regExp);
+                if (match && match[2].length === 11) {
+                    return `https://www.youtube.com/embed/${match[2]}`;
+                }
+            }
+            return url;
         }
 
         const socket = io(SERVER_URL, {
@@ -587,7 +598,7 @@
                 }
             }
             if (state.mode === 'iframe' && iframe.src !== state.current_url) {
-                iframe.src = state.current_url;
+                iframe.src = formatEmbedUrl(state.current_url);
                 switchToIframe();
             } else if (state.mode === 'video' && state.current_url) {
                 loadRawVideo(state.current_url, false);
@@ -722,7 +733,7 @@
 
         socket.on('player_command', (data) => {
             if (data.action === 'load_iframe') {
-                iframe.src = data.url;
+                iframe.src = formatEmbedUrl(data.url);
                 switchToIframe();
             }
             if (data.action === 'load_video') {
@@ -834,7 +845,8 @@
 
         function loadIframe() {
             const inputVal = document.getElementById('targetUrl').value.trim();
-            const url = inputVal ? inputVal : 'https://kinovibe.cc/';
+            const rawUrl = inputVal ? inputVal : 'https://kinovibe.cc/';
+            const url = formatEmbedUrl(rawUrl); // Автоматическое преобразовывание YouTube в /embed/
             iframe.src = url;
             switchToIframe();
             socket.emit('player_action', { action: 'load_iframe', url: url });
@@ -844,12 +856,11 @@
             const url = document.getElementById('targetUrl').value.trim();
             if (!url) return alert('Вставь ссылку!');
             document.getElementById('syncStartBtn').style.display = 'none';
-            addLog('INFO', 'Запуск v8.0 YouTube Engine...', url);
+            addLog('INFO', 'Запуск v8.1 YouTube Fix...', url);
             socket.emit('extract_magic', { url: url });
         }
     </script>
 
-    <!-- Подключение внешнего модуля трансляции в Telegram -->
     <script src="tg_stream.js"></script>
 </body>
 </html>
