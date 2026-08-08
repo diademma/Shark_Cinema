@@ -1,6 +1,6 @@
-// === МОДУЛЬ ТРАНСЛЯЦИИ В TELEGRAM (TG_STREAM.JS) ===
+// === МОДУЛЬ ТРАНСЛЯЦИИ В TELEGRAM (TG_STREAM.JS v2.0) ===
 (function() {
-    console.log("📡 Загружен модуль Telegram Stream v1.0");
+    console.log("📡 Загружен модуль Telegram Stream v2.0 (YouTube & Kinovibe)");
 
     // Загрузка сохраненных ключей из памяти
     const savedServer = localStorage.getItem('tg_rtmp_server') || "rtmp://dc1.rtmp.t.me/s/";
@@ -9,14 +9,14 @@
     // Создаем HTML панель Telegram Стрима
     function createTgPanel() {
         const ownerPanel = document.getElementById('ownerPanel');
-        if (!ownerPanel) return;
+        if (!ownerPanel || document.getElementById('tgStreamBox')) return; // Защита от дубликатов
 
         const tgBox = document.createElement('div');
         tgBox.id = 'tgStreamBox';
         tgBox.style.cssText = 'margin-top: 15px; border-top: 1px solid #332252; padding-top: 12px;';
         
         tgBox.innerHTML = `
-            <small style="color: #c77dff; display: block; margin-bottom: 8px; font-weight: bold;">📡 Прямой Стрим в Telegram Канал (RTMP):</small>
+            <small style="color: #c77dff; display: block; margin-bottom: 8px; font-weight: bold;">📡 Прямой Стрим в Telegram Канал (Kinovibe / YouTube RTMP):</small>
             <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;">
                 <input type="text" id="tgRtmpServer" class="url-input" placeholder="Сервер RTMP" value="${savedServer}">
                 <input type="password" id="tgStreamKey" class="url-input" placeholder="Ключ трансляции" value="${savedKey}">
@@ -81,8 +81,12 @@
         }
     });
 
-    // Инициализация панели после загрузки страницы
-    document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(createTgPanel, 1000);
-    });
+    // Инициализация панели при любой скорости загрузки страницы
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+        setTimeout(createTgPanel, 500);
+    } else {
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(createTgPanel, 500);
+        });
+    }
 })();
