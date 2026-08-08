@@ -34,12 +34,17 @@ room_state = {
     "tg_streaming": False
 }
 
-# --- YOUTUBE ДЕКОДЕР ПОТОКОВ (yt-dlp) ---
+# --- YOUTUBE ДЕКОДЕР ПОТОКОВ V8.1 (С обходом VPS IP блоков) ---
 def extract_youtube_stream(yt_url):
     ydl_opts = {
         'format': 'best[ext=mp4]/best',
         'quiet': True,
-        'no_warnings': True
+        'no_warnings': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'ios', 'web']
+            }
+        }
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(yt_url, download=False)
@@ -206,7 +211,7 @@ async def fetch_playerjs_playlist(session, pl_url):
         print(f"[❌] Error reading Playerjs playlist: {e}")
         return []
 
-# === 📡 МОДУЛЬ СТРИМА В TELEGRAM (FFMPEG -C COPY) ===
+# === 📡 МОДУЛЬ СТРИМА В TELEGRAM (АДАПТИВНЫЕ ЗАГОЛОВКИ) ===
 async def monitor_ffmpeg(owner_sid):
     global ffmpeg_process
     if ffmpeg_process:
@@ -229,13 +234,19 @@ async def tg_start_stream(sid, data):
     full_rtmp = f"{rtmp_server}/{stream_key}"
     video_url = room_state.get("current_url")
 
-    if not video_url:
-        await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Стрим не запущен: сначала выберите фильм!'}, to=sid)
+    if not video_url or not video_url.startswith('http'):
+        await sio.emit('server_log', {'type': 'ERROR', 'msg': 'Стрим не запущен: выберите фильм или YouTube видео!'}, to=sid)
         return
 
     if ffmpeg_process and ffmpeg_process.returncode is None:
         try: ffmpeg_process.kill()
         except: pass
+
+    # Выбор заголовков зависит от источника (YouTube vs Kinovibe)
+    if "googlevideo.com" in video_url or "youtube.com" in video_url:
+        ref_header = "Referer: https://www.youtube.com/\r\nUser-Agent: Mozilla/5.0\r\n"
+    else:
+        ref_header = "Referer: https://kinovibe.cc/\r\nUser-Agent: Mozilla/5.0\r\n"
 
     cmd = [
         "ffmpeg",
@@ -243,7 +254,7 @@ async def tg_start_stream(sid, data):
         "-reconnect_at_eof", "1",
         "-reconnect_streamed", "1",
         "-reconnect_delay_max", "5",
-        "-headers", "Referer: https://kinovibe.cc/\r\nUser-Agent: Mozilla/5.0\r\n",
+        "-headers", ref_header,
         "-re",
         "-i", video_url,
         "-c:v", "copy",
@@ -255,7 +266,7 @@ async def tg_start_stream(sid, data):
         full_rtmp
     ]
 
-    print(f"[📡] Starting Telegram Stream via FFmpeg...")
+    print(f"[📡] Starting Telegram Stream via FFmpeg (v8.1 Adaptive)...")
     
     try:
         ffmpeg_process = await asyncio.create_subprocess_exec(
@@ -403,18 +414,17 @@ async def switch_episode(sid, data):
             'url': ep["url"]
         })
 
-# === УНИВЕРСАЛЬНЫЙ ИЗВЛЕКАТЕЛЬ МЕДИА (KINOVIBE И YOUTUBE) ===
 @sio.event
 async def extract_magic(sid, data):
     if sid != room_state["owner_sid"]: return
     url = data.get("url", "").strip()
     
-    await sio.emit('server_log', {'type': 'INFO', 'msg': 'YouTube & Universal v8.0 сканирует...', 'details': url}, to=sid)
+    await sio.emit('server_log', {'type': 'INFO', 'msg': 'YouTube v8.1 Fix сканирует...', 'details': url}, to=sid)
 
-    # 🔴 ОБРАБОТКА YOUTUBE ССЫЛОК (yt-dlp)
+    # 🔴 ОБРАБОТКА YOUTUBE ССЫЛОК (yt-dlp v8.1 с обходом блокировки VPS)
     if "youtube.com" in url or "youtu.be" in url:
         try:
-            await sio.emit('server_log', {'type': 'INFO', 'msg': 'Запуск yt-dlp для YouTube...'}, to=sid)
+            await sio.emit('server_log', {'type': 'INFO', 'msg': 'Запуск yt-dlp для YouTube (Мобильный клиент)...'}, to=sid)
             
             loop = asyncio.get_event_loop()
             yt_info = await loop.run_in_executor(None, extract_youtube_stream, url)
@@ -432,7 +442,7 @@ async def extract_magic(sid, data):
                 
                 save_state_to_disk()
                 
-                await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'YouTube Видео извлечено: {yt_title}'}, to=sid)
+                await sio.emit('server_log', {'type': 'SUCCESS', 'msg': f'YouTube Извлечен: {yt_title}'}, to=sid)
                 
                 await sio.emit('player_command', {
                     'action': 'update_playlist', 
